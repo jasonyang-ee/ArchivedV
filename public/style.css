@@ -1,0 +1,105 @@
+body {
+  background: #f4f4f4;
+  padding: 2em 0;
+}
+.page-wrapper {
+  max-width: 900px;
+  margin: auto;
+}
+.console-output {
+  background: #1e1e1e;
+  color: #ccc;
+  padding: 1em;
+  overflow-y: auto;
+  max-height: 300px;
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.channel-link {
+  font-size: 0.9em;
+  color: #888 !important;
+  display: block;
+  margin-top: 0.3em;
+  word-wrap: break-word;
+}
+/* Channel metadata styling */
+.channel-meta {
+  display: block;
+  font-size: 0.9em;
+  color: #888;
+  margin-top: 0.2em;
+}
+.channel-meta a {
+  color: #888;
+}
+.channel-meta a:visited {
+  color: #888;
+}
+.username {
+  font-size: 1.2em;
+  font-weight: bold;
+  display: inline-block;
+}
+.ui.relaxed.list .item {
+  padding: 0.75em 0;
+}
+/* space under header before description */
+.description { margin-top: 0.2em; }
+
+/* Section headers (Channels, Keywords, Status, Download History) */
+.ui.dividing.header {
+  font-size: 1.5em;
+  margin-top: 1em;
+  margin-bottom: 0.75em;
+}
+/* Remove top margin for Channels/Keywords in the two-column grid */
+.two.column.stackable.grid .ui.segment > .ui.dividing.header {
+  margin-top: 0;
+}
+
+/* Status block styling */
+#statusWrapper {
+  padding: 1.5em;
+}
+#statusWrapper .ui.header {
+  margin-top: 0;
+  margin-bottom: 1em;
+}
+#historyWrapper .ui.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0;
+}
+.status-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 8px;
+  margin: 8px 0;
+}
+.status-item:last-child {
+  border-bottom: none;
+}
+.status-item .label {
+  font-weight: bold;
+  color: #333;
+}
+.status-item .value {
+  color: #555;
+  text-align: right;
+}
+
+/* Download History item styling */
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.history-title {
+  font-weight: normal;
+}
+.history-time {
+  color: #888;
+  font-size: 0.9em;
+}

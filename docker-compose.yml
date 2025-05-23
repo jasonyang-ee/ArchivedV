@@ -1,0 +1,18 @@
+  vtuber:
+    build:
+      context: ./vtuber/src
+    image: vtuber:latest
+    container_name: vtuber
+    restart: unless-stopped
+    user: "1000:1000"
+    networks:
+      - main
+    volumes:
+      - ./vtuber/data:/app/data
+      - /video/save/path:/app/download
+    environment:
+      PUSHOVER_APP_TOKEN: ${PUSHOVER_APP_TOKEN}
+      PUSHOVER_USER_TOKEN: ${PUSHOVER_USER_TOKEN}
+      TZ: America/Los_Angeles
+    ports:
+      - "3000:3000"
