@@ -1,8 +1,6 @@
   vtuber:
-    build:
-      context: ./vtuber/src
-    image: vtuber:latest
-    container_name: vtuber
+    image: archivedv:latest
+    container_name: archivedv
     restart: unless-stopped
     user: "1000:1000"
     networks:
