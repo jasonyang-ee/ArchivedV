@@ -12,7 +12,7 @@ The purpose of this project is to save vtuber singing streams where often are un
 
 > jasonyangee/archivedv:latest
 
-> ghcr.io/jasonyangee/archivedv:latest
+> ghcr.io/jasonyang-ee/archivedv:latest
 
 ## Run using Docker Compose
 
