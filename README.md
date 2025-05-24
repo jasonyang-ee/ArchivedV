@@ -14,7 +14,7 @@ The purpose of this project is to save vtuber singing streams where often are un
 
 > ghcr.io/jasonyang-ee/archivedv:latest
 
-## Run using Docker Compose
+## Run Using Docker Compose
 
 ```yaml
 services:
@@ -27,19 +27,23 @@ services:
       - "3000:3000"
     volumes:
       - ./vtuber/data:/app/data
-      - ./vtuber/video/path:/app/download
+      - ./vtuber/video:/app/download
     environment:
       TZ: America/Los_Angeles
       # PUSHOVER_APP_TOKEN: ${PUSHOVER_APP_TOKEN}
       # PUSHOVER_USER_TOKEN: ${PUSHOVER_USER_TOKEN}
 ```
 
+## Web Interface
+
+Access the web interface at `http://<host_ip>:3000`
+
 ## Data Persistence
 
 Bind mounts to preserve data:
 
-- **Configuration & History**: stored in the `/app/data/db.json`
-- **Downloads**: saved under `/app/download/<channel_username>/<video_title>/`.
+- **Configurations**: `/app/data/db.json`
+- **Downloaded Videos**: `/app/download/<channel_username>/<video_title>/`
 
 ## Scheduling
 
