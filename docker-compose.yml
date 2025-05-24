@@ -1,16 +1,15 @@
+services:
   vtuber:
     image: archivedv:latest
     container_name: archivedv
     restart: unless-stopped
     user: "1000:1000"
-    networks:
-      - main
+    ports:
+      - "3000:3000"
     volumes:
       - ./vtuber/data:/app/data
-      - /video/save/path:/app/download
+      - ./vtuber/video/path:/app/download
     environment:
       PUSHOVER_APP_TOKEN: ${PUSHOVER_APP_TOKEN}
       PUSHOVER_USER_TOKEN: ${PUSHOVER_USER_TOKEN}
       TZ: America/Los_Angeles
-    ports:
-      - "3000:3000"
