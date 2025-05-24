@@ -1,4 +1,5 @@
 [![DockerPublish](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/publish.yml/badge.svg)](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/publish.yml)
+[![Testing](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/testing.yml/badge.svg)](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/testing.yml)
 
 # (Un)Archived V
 
