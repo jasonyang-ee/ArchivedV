@@ -286,5 +286,5 @@ db.read().then(() => {
       checkUpdates().catch((err) => console.error("Cron error:", err));
     }
   });
-  app.listen(PORT, () => console.log(`Listening on ${PORT}`));
+  app.listen(PORT, () => console.log(`Web UI Listening on Port: ${PORT}`));
 });
