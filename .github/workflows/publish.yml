@@ -3,7 +3,7 @@ name: 'DockerPublish'
 on:
   push:
     tags:
-      - '*'
+      - 'v*'
 
 jobs:
   Build_Upload:
