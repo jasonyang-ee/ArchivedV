@@ -2,7 +2,7 @@ name: 'Testing'
 
 on:
   push:
-    branch:
+    branches:
       - 'test'
 
 jobs:
