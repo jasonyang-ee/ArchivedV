@@ -18,7 +18,7 @@ The purpose of this project is to save vtuber singing streams where often are un
 
 ```yaml
 services:
-  archivedv:
+  vtuber:
     image: jasonyangee/archivedv:latest
     container_name: archivedv
     restart: unless-stopped
@@ -26,12 +26,12 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./archivedv/data:/app/data
-      - ./archivedv/video/path:/app/download
+      - ./vtuber/data:/app/data
+      - ./vtuber/video/path:/app/download
     environment:
-      PUSHOVER_APP_TOKEN: ${PUSHOVER_APP_TOKEN}
-      PUSHOVER_USER_TOKEN: ${PUSHOVER_USER_TOKEN}
       TZ: America/Los_Angeles
+      # PUSHOVER_APP_TOKEN: ${PUSHOVER_APP_TOKEN}
+      # PUSHOVER_USER_TOKEN: ${PUSHOVER_USER_TOKEN}
 ```
 
 ## Data Persistence

@@ -10,6 +10,6 @@ services:
       - ./vtuber/data:/app/data
       - ./vtuber/video/path:/app/download
     environment:
-      PUSHOVER_APP_TOKEN: ${PUSHOVER_APP_TOKEN}
-      PUSHOVER_USER_TOKEN: ${PUSHOVER_USER_TOKEN}
       TZ: America/Los_Angeles
+      # PUSHOVER_APP_TOKEN: ${PUSHOVER_APP_TOKEN}
+      # PUSHOVER_USER_TOKEN: ${PUSHOVER_USER_TOKEN}
