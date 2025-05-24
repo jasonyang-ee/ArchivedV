@@ -48,3 +48,9 @@ A cron job runs every 10 minutes to check for new live streams.
 ## Notifications (Optional)
 
 Pushover is used to send mobile/desktop notifications on each successful download.
+
+## Folder Permissions
+
+It is recommended to run the container with a non-root user. The default user ID is `1000`.
+
+Change to the user ID of your host system if necessary. You can do this by modifying the `user` field in the Docker Compose file.
