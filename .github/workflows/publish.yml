@@ -57,9 +57,8 @@ jobs:
       uses: docker/build-push-action@v4
       id: build_multiarch
       with:
-        context: .
+        context: ./src
         platforms: linux/amd64,linux/arm64,linux/arm/v7
-        file: ${{ github.workspace }}/src/Dockerfile
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
