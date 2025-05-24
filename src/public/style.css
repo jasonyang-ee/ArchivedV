@@ -45,7 +45,9 @@ body {
   padding: 0.75em 0;
 }
 /* space under header before description */
-.description { margin-top: 0.2em; }
+.description {
+  margin-top: 0.2em;
+}
 
 /* Section headers (Channels, Keywords, Status, Download History) */
 .ui.dividing.header {

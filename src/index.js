@@ -9,7 +9,12 @@ const fs = require("fs");
 const { db } = require("./db");
 
 // Status tracking
-const status = { lastRun: null, downloadedCount: 0, current: null, lastCompleted: null };
+const status = {
+  lastRun: null,
+  downloadedCount: 0,
+  current: null,
+  lastCompleted: null,
+};
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -165,7 +170,7 @@ async function checkUpdates() {
         try {
           files = fs.readdirSync(dir);
         } catch (e) {
-          if (e.code === 'ENOENT') {
+          if (e.code === "ENOENT") {
             dirExists = false;
           } else {
             throw e;
@@ -183,17 +188,34 @@ async function checkUpdates() {
         // create folder and download
         fs.mkdirSync(dir, { recursive: true });
         // download with default logging to console
-        const proc = spawn('yt-dlp', [
-          '--live-from-start', '-ciw', '--no-progress',
-          '-o', path.join(dir, '%(title)s.%(ext)s'),
-          '--embed-thumbnail', '--add-metadata', '--merge-output-format', 'mp4',
-          videoLink
-        ], { stdio: 'inherit' });
-        await new Promise((res, rej) => proc.on('close', code => code === 0 ? res() : rej(new Error('download failed'))));
+        const proc = spawn(
+          "yt-dlp",
+          [
+            "--live-from-start",
+            "-ciw",
+            "--no-progress",
+            "-o",
+            path.join(dir, "%(title)s.%(ext)s"),
+            "--embed-thumbnail",
+            "--add-metadata",
+            "--merge-output-format",
+            "mp4",
+            videoLink,
+          ],
+          { stdio: "inherit" }
+        );
+        await new Promise((res, rej) =>
+          proc.on("close", (code) =>
+            code === 0 ? res() : rej(new Error("download failed"))
+          )
+        );
         // update status after completion
         status.lastCompleted = title;
         status.current = null;
-        push.send({ message: `Downloaded: ${title}`, title }, () => {});
+        if (process.env.PUSHOVER_APP_TOKEN && process.env.PUSHOVER_USER_TOKEN) {
+          // send notification via Pushover
+          push.send({ message: `Downloaded: ${title}`, title }, () => {});
+        }
         // record download history
         await db.read();
         db.data.history.push({ title, time: new Date().toISOString() });
@@ -213,7 +235,7 @@ async function checkUpdates() {
     const channelDir = path.join(DOWNLOAD_DIR, ch.username);
     if (fs.existsSync(channelDir)) {
       const items = fs.readdirSync(channelDir, { withFileTypes: true });
-      total += items.filter(d => d.isDirectory()).length;
+      total += items.filter((d) => d.isDirectory()).length;
     }
   }
   status.downloadedCount = total;
@@ -227,7 +249,7 @@ app.post("/api/refresh", (req, res) => {
   // reset current download only
   status.current = null;
   // kick off checkUpdates asynchronously
-  checkUpdates().catch(err => console.error('Refresh error:', err));
+  checkUpdates().catch((err) => console.error("Refresh error:", err));
   // respond immediately with current status
   res.json(status);
 });
@@ -250,7 +272,7 @@ app.delete("/api/history", async (req, res) => {
 db.read().then(() => {
   cron.schedule("*/10 * * * *", () => {
     if (!status.current) {
-      checkUpdates().catch(err => console.error('Cron error:', err));
+      checkUpdates().catch((err) => console.error("Cron error:", err));
     }
   });
   app.listen(PORT, () => console.log(`Listening on ${PORT}`));
