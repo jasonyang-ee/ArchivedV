@@ -1,8 +1,12 @@
+[![DockerPublish](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/publish.yml/badge.svg)](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/publish.yml)
+
 # Unarchived V
 
 A self-hosted YouTube stream download service with keyword filtering. The service automatically checks subscribed channels for new live streams, downloads matching videos to a specified directory, and sends notifications via Pushover.
 
 The purpose of this project is to save vtuber singing streams where often are unarchived due to copyright issues.
+
+![main page](doc/mainpage.png)
 
 ## Public Docker Image
 
