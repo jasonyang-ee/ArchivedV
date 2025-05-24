@@ -1,6 +1,6 @@
 services:
   vtuber:
-    image: archivedv:latest
+    image: jasonyangee/archivedv:latest
     container_name: archivedv
     restart: unless-stopped
     user: "1000:1000"
