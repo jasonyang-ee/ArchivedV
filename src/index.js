@@ -271,6 +271,9 @@ app.delete("/api/history", async (req, res) => {
 // start cron + server
 db.read().then(() => {
   cron.schedule("*/10 * * * *", () => {
+	const now = new Date();
+	const timeStr = now.toLocaleTimeString();
+	console.log(`[${now.toISOString()}][${timeStr}] Checked for New Streams`);
     if (!status.current) {
       checkUpdates().catch((err) => console.error("Cron error:", err));
     }
