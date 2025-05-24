@@ -23,7 +23,7 @@ jobs:
         images: |
           ${{ secrets.USERNAME_DOCKERHUB }}/archivedv
           ghcr.io/${{ github.actor }}/archivedv
-        tags: type=ref,event=tag
+        tags: type=ref,event=branch
         flavor: onlatest=false
 
     - name: Login to Docker Hub
