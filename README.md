@@ -15,10 +15,10 @@ The purpose of this project is to save Vtuber singing streams where often are un
 
 ## Service Feature:
 
-1. Automatically checks subscribed channels for new live streams
-2. Downloads matching videos based on specified keyword list
-3. Sends notifications via Pushover.
-4. Channel and Keyword management via web interface
+1. Automatically check subscribed channels for new live streams.
+2. Download matching videos based on a specified keyword list.
+3. Send notifications via Pushover.
+4. Manage channels and keywords via the web interface.
 
 
 ## Screenshot
