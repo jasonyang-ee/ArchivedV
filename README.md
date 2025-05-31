@@ -18,7 +18,7 @@ The purpose of this project is to save Vtuber singing streams where often are un
 1. Automatically checks subscribed channels for new live streams
 2. Downloads matching videos based on specified keyword list
 3. Sends notifications via Pushover.
-4. Channle and Keyword management via web interface
+4. Channel and Keyword management via web interface
 
 
 ## Screenshot
