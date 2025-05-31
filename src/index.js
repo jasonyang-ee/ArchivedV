@@ -41,8 +41,8 @@ function sanitize(str) {
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
-// serve favicon from the doc folder
-app.use('/favicon.ico', express.static(path.join(__dirname, '..', 'doc', 'Logo.ico')));
+// serve favicon from src root folder
+app.use('/favicon.ico', express.static(path.join(__dirname, 'Logo.ico')));
 
 // API endpoints
 app.get("/api/config", async (req, res) => {
