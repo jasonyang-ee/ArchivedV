@@ -18,6 +18,7 @@ The purpose of this project is to save Vtuber singing streams where often are un
 1. Automatically checks subscribed channels for new live streams
 2. Downloads matching videos based on specified keyword list
 3. Sends notifications via Pushover.
+4. Channle and Keyword management via web interface
 
 
 ## Screenshot
@@ -26,10 +27,12 @@ The purpose of this project is to save Vtuber singing streams where often are un
 
 ## Public Docker Image
 
+>[Docker Hub](https://hub.docker.com/r/jasonyangee/archivedv)
 ```
 jasonyangee/archivedv:latest
 ```
 
+>[GitHub Container Registry](https://github.com/jasonyang-ee/ArchivedV/pkgs/container/archivedv)
 ```
 ghcr.io/jasonyang-ee/archivedv:latest
 ```
@@ -71,7 +74,7 @@ A cron job runs every 10 minutes to check for new live streams.
 
 ## Notifications (Optional)
 
-Pushover is used to send mobile/desktop notifications on each successful download.
+[Pushover](https://pushover.net/) is used to send mobile/desktop notifications on each successful download.
 
 ## Folder Permissions
 
