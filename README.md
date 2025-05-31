@@ -2,19 +2,11 @@
 [![Testing](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/testing.yml/badge.svg)](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/testing.yml)
 
 
-<p align="center", style="font-size: 2.2em; font-weight: bold;">
-(Un)Archived V
-</p>
+<h1 align="center">(Un)Archived V</h1>
+<h3 align="center">Youtube Stream Download Service With Keyword Filtering.</h3>
+<p align="center"><img src="doc/Logo.png" alt="Logo" /></p>
 
-<p align="center", style="font-size: 1.2em; font-weight: bold;">
-Youtube Stream Download Service With Keyword Filtering.
-</p>
 
-<p align="center">
-  <img src="doc/Logo.png" alt="Logo" />
-  <br/>
-	<br/>
-</p>
 
 ## Main Purpose:
 
