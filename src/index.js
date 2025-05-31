@@ -1,6 +1,8 @@
 const express = require("express");
 const path = require("path");
 const axios = require("axios");
+// set a default timeout for all axios requests (in ms)
+axios.defaults.timeout = Number(process.env.AXIOS_TIMEOUT_MS) || 20000;
 const { Parser, processors } = require("xml2js");
 const cron = require("node-cron");
 const { spawn } = require("child_process");
@@ -223,7 +225,12 @@ async function checkUpdates() {
         count++;
       }
     } catch (e) {
-      console.error(e);
+      if (e.code === 'ETIMEDOUT') {
+        console.warn(`[$
+        {new Date().toISOString()}] Timeout fetching feed for channel ${ch.username}`);
+      } else {
+        console.error(e);
+      }
       // on error, clear current status
       status.current = null;
     }
