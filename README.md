@@ -37,6 +37,11 @@ jasonyangee/archivedv:latest
 ghcr.io/jasonyang-ee/archivedv:latest
 ```
 
+## Supported Platforms
+- Linux AMD64
+- Linux ARM64
+- Linux ARMv7
+
 ## Run Using Docker Compose
 
 ```yaml
@@ -81,3 +86,12 @@ A cron job runs every 10 minutes to check for new live streams.
 It is recommended to run the container with a non-root user. The default user ID is `1000`.
 
 Change to the user ID of your host system if necessary. You can do this by modifying the `user` field in the Docker Compose file.
+
+## Potential Issues
+
+Folder permissions may cause issues. Please manually `chown` the volume bind folders to the user ID specified in the Docker Compose file.
+
+> Example Command
+```bash
+sudo chown -R 1000:1000 ./vtuber
+```
