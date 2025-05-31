@@ -3,9 +3,26 @@
 
 # (Un)Archived V
 
-A self-hosted YouTube stream download service with keyword filtering. The service automatically checks subscribed channels for new live streams, downloads matching videos to a specified directory, and sends notifications via Pushover.
+<p align="center">
+  <img src="doc/Logo.png" alt="Logo" />
+</p>
+<p align="center", style="font-size: 1.2em; font-weight: bold;">
+A self-hosted YouTube stream download service with keyword filtering.
+</p>
 
-The purpose of this project is to save vtuber singing streams where often are unarchived due to copyright issues.
+## Main Purpose:
+
+The purpose of this project is to save Vtuber singing streams where often are unarchived due to copyright issues.
+
+
+## Service Feature:
+
+1. Automatically checks subscribed channels for new live streams
+2. Downloads matching videos based on specified keyword list
+3. Sends notifications via Pushover.
+
+
+## Screenshot
 
 ![main page](doc/mainpage.png)
 
