@@ -42,7 +42,7 @@ function sanitize(str) {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 // serve favicon from src root folder
-app.use('/favicon.ico', express.static(path.join(__dirname, 'Logo.ico')));
+app.use("/favicon.ico", express.static(path.join(__dirname, "Logo.ico")));
 
 // API endpoints
 app.get("/api/config", async (req, res) => {
@@ -227,7 +227,7 @@ async function checkUpdates() {
         count++;
       }
     } catch (e) {
-      if (e.code === 'ETIMEDOUT') {
+      if (e.code === "ETIMEDOUT") {
         console.warn(`[$
         {new Date().toISOString()}] Timeout fetching feed for channel ${ch.username}`);
       } else {
@@ -261,6 +261,20 @@ app.post("/api/refresh", (req, res) => {
   checkUpdates().catch((err) => console.error("Refresh error:", err));
   // respond immediately with current status
   res.json(status);
+
+  const now = new Date();
+  const timeStr = now.toLocaleString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+  console.log(
+    `[${now.toISOString()}][${timeStr}] Manual Checking for New Streams`
+  );
 });
 // history endpoints
 app.get("/api/status", (req, res) => {
@@ -290,7 +304,9 @@ db.read().then(() => {
       month: "short",
       day: "numeric",
     });
-    console.log(`[${now.toISOString()}][${timeStr}] Checked for New Streams`);
+    console.log(
+      `[${now.toISOString()}][${timeStr}] Scheduled Checking for New Streams`
+    );
     if (!status.current) {
       checkUpdates().catch((err) => console.error("Cron error:", err));
     }
