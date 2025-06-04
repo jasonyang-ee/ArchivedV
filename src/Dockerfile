@@ -19,4 +19,8 @@ COPY . .
 # Expose and start
 USER 1000
 EXPOSE 3000
-CMD ["node", "index.js"]
+
+HEALTHCHECK --interval=5m --timeout=10s --start-period=10s --retries=3 \
+  CMD curl -f http://127.0.0.1:3000/ || exit 1
+
+ENTRYPOINT ["node", "index.js"]
