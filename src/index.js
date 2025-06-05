@@ -201,7 +201,7 @@ async function checkUpdates() {
         fs.mkdirSync(dir, { recursive: true });
         // record current download in DB
         await db.read();
-        db.data.currentDownload = { channel: ch.id, title };
+        db.data.currentDownload = { channel: ch.id, title, username: ch.username };
         await db.write();
         // download with prefixed logging
         const proc = spawn(
@@ -296,8 +296,16 @@ async function checkUpdates() {
 async function getStatus() {
   await db.read();
   const persistent = db.data.currentDownload;
-  const currentTitle = status.current || (persistent && persistent.title) || null;
-  return { ...status, current: currentTitle };
+  // if an in-memory current exists, show title; otherwise, show persisted username and title
+  let current;
+  if (status.current) {
+    current = status.current;
+  } else if (persistent && persistent.title) {
+    current = `${persistent.username}: ${persistent.title}`;
+  } else {
+    current = null;
+  }
+  return { ...status, current };
 }
 
 // API: manual refresh and status
