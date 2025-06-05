@@ -348,7 +348,10 @@ app.delete("/api/history", async (req, res) => {
 });
 
 // start cron + server
-db.read().then(() => {
+db.read().then(async () => {
+  // clear any stale currentDownload on startup
+  db.data.currentDownload = { channel: null, title: null, username: null };
+  await db.write();
   cron.schedule("*/10 * * * *", () => {
     const now = new Date();
     const timeStr = now.toLocaleString(undefined, {
