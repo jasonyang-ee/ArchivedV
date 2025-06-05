@@ -296,15 +296,11 @@ async function checkUpdates() {
 async function getStatus() {
   await db.read();
   const persistent = db.data.currentDownload;
-  // if an in-memory current exists, show title; otherwise, show persisted username and title
-  let current;
-  if (status.current) {
-    current = status.current;
-  } else if (persistent && persistent.title) {
-    current = `${persistent.username}: ${persistent.title}`;
-  } else {
-    current = null;
-  }
+  // always display currentDownload from DB
+  const current =
+    persistent && persistent.title
+      ? `${persistent.username}: ${persistent.title}`
+      : null;
   return { ...status, current };
 }
 
