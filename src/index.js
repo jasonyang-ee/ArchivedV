@@ -137,6 +137,7 @@ app.get("/", (req, res) => {
 // download job
 async function checkUpdates() {
   await db.read();
+  const inProgress = db.data.currentDownload;
   // clear current download at start
   status.current = null;
   const channels = db.data.channels;
@@ -144,6 +145,13 @@ async function checkUpdates() {
   let count = 0;
 
   for (const ch of channels) {
+    // skip channel if a download is already in progress for it
+    if (inProgress && inProgress.channel === ch.id) {
+      console.log(
+        `[Archived V] Skipping ${ch.id} – download in progress for "${inProgress.title}"`
+      );
+      continue;
+    }
     try {
       const xml = (await axios.get(ch.link)).data;
       const result = await xmlParser.parseStringPromise(xml);
@@ -191,7 +199,11 @@ async function checkUpdates() {
         }
         // create folder and download
         fs.mkdirSync(dir, { recursive: true });
-        // download with default logging to console
+        // record current download in DB
+        await db.read();
+        db.data.currentDownload = { channel: ch.id, title };
+        await db.write();
+        // download with prefixed logging
         const proc = spawn(
           "yt-dlp",
           [
@@ -206,12 +218,39 @@ async function checkUpdates() {
             "mp4",
             videoLink,
           ],
-          { stdio: "inherit" }
+          { stdio: ["pipe", "pipe", "pipe"] }
         );
+        let stderr = "";
+        // prefix stdout from yt-dlp
+        proc.stdout.on("data", (chunk) => {
+          chunk
+            .toString()
+            .split(/\r?\n/)
+            .forEach((line) => {
+              if (line) console.log(`[yt-dlp] ${line}`);
+            });
+        });
+        // capture and prefix stderr for error/skip detection
+        proc.stderr.on("data", (chunk) => {
+          const text = chunk.toString();
+          stderr += text;
+          text.split(/\r?\n/).forEach((line) => {
+            if (line) console.warn(`[yt-dlp] ${line}`);
+          });
+        });
         await new Promise((res, rej) =>
-          proc.on("close", (code) =>
-            code === 0 ? res() : rej(new Error("download failed"))
-          )
+          proc.on("close", (code) => {
+            if (code === 0 || stderr.includes("This live event will begin")) {
+              // clear currentDownload after yt-dlp completes or skip
+              (async () => {
+                await db.read();
+                db.data.currentDownload = null;
+                await db.write();
+              })();
+              return res();
+            }
+            return rej(new Error("download failed"));
+          })
         );
         // update status after completion
         status.lastCompleted = title;
@@ -228,10 +267,11 @@ async function checkUpdates() {
       }
     } catch (e) {
       if (e.code === "ETIMEDOUT") {
-        console.warn(`[$
-        {new Date().toISOString()}] Timeout fetching feed for channel ${ch.username}`);
+        console.warn(
+          `[Archived V] Timeout fetching feed for channel ${ch.username}`
+        );
       } else {
-        console.error(e);
+        console.error(`[Archived V]`, e);
       }
       // on error, clear current status
       status.current = null;
@@ -252,15 +292,24 @@ async function checkUpdates() {
   status.current = null;
 }
 
+// helper to produce status including persistent currentDownload
+async function getStatus() {
+  await db.read();
+  const persistent = db.data.currentDownload;
+  const currentTitle = status.current || (persistent && persistent.title) || null;
+  return { ...status, current: currentTitle };
+}
+
 // API: manual refresh and status
 // start a background refresh without blocking the response
-app.post("/api/refresh", (req, res) => {
+app.post("/api/refresh", async (req, res) => {
   // reset current download only
   status.current = null;
   // kick off checkUpdates asynchronously
-  checkUpdates().catch((err) => console.error("Refresh error:", err));
-  // respond immediately with current status
-  res.json(status);
+  checkUpdates().catch((err) => console.error(`[Archived V] Refresh error:`, err));
+  // respond immediately with merged status
+  const s = await getStatus();
+  res.json(s);
 
   const now = new Date();
   const timeStr = now.toLocaleString(undefined, {
@@ -272,13 +321,12 @@ app.post("/api/refresh", (req, res) => {
     month: "short",
     day: "numeric",
   });
-  console.log(
-    `[${now.toISOString()}][${timeStr}] Manual Checking for New Streams`
-  );
+  console.log(`[Archived V] [${timeStr}] Manual Checking for New Streams`);
 });
 // history endpoints
-app.get("/api/status", (req, res) => {
-  res.json(status);
+app.get("/api/status", async (req, res) => {
+  const s = await getStatus();
+  res.json(s);
 });
 app.get("/api/history", async (req, res) => {
   await db.read();
@@ -304,12 +352,14 @@ db.read().then(() => {
       month: "short",
       day: "numeric",
     });
-    console.log(
-      `[${now.toISOString()}][${timeStr}] Scheduled Checking for New Streams`
-    );
+    console.log(`[Archived V] [${timeStr}] Scheduled Checking for New Streams`);
     if (!status.current) {
-      checkUpdates().catch((err) => console.error("Cron error:", err));
+      checkUpdates().catch((err) =>
+        console.error(`[Archived V] Cron error:`, err)
+      );
     }
   });
-  app.listen(PORT, () => console.log(`Web UI Listening on Port: ${PORT}`));
+  app.listen(PORT, () =>
+    console.log(`[Archived V] Web UI Listening on Port: ${PORT}`)
+  );
 });

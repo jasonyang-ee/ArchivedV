@@ -7,7 +7,7 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 const dbPath = path.join(dataDir, "db.json");
 // initial in-memory store
-let store = { channels: [], keywords: [], history: [] };
+let store = { channels: [], keywords: [], history: [], currentDownload: null };
 // create initial db.json if not exists
 if (!fs.existsSync(dbPath)) {
   fs.writeFileSync(dbPath, JSON.stringify(store, null, 2));
@@ -17,7 +17,7 @@ const db = {
   data: store,
   async read() {
     if (!fs.existsSync(dbPath)) {
-      store = { channels: [], keywords: [], history: [] };
+      store = { channels: [], keywords: [], history: [], currentDownload: null };
       fs.writeFileSync(dbPath, JSON.stringify(store, null, 2));
     } else {
       try {
@@ -25,8 +25,10 @@ const db = {
         store = JSON.parse(file);
         // ensure history exists
         if (!store.history) store.history = [];
+        // ensure currentDownload field exists
+        if (!('currentDownload' in store)) store.currentDownload = null;
       } catch {
-        store = { channels: [], keywords: [], history: [] };
+        store = { channels: [], keywords: [], history: [], currentDownload: null };
         fs.writeFileSync(dbPath, JSON.stringify(store, null, 2));
       }
     }
