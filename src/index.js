@@ -255,6 +255,9 @@ async function checkUpdates() {
         // update status after completion
         status.lastCompleted = title;
         status.current = null;
+		await db.read();
+		db.data.currentDownload = null;
+		await db.write();
         if (process.env.PUSHOVER_APP_TOKEN && process.env.PUSHOVER_USER_TOKEN) {
           // send notification via Pushover
           push.send({ message: `Downloaded: ${title}`, title }, () => {});
