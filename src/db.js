@@ -7,7 +7,8 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 const dbPath = path.join(dataDir, "db.json");
 // initial in-memory store
-let store = { channels: [], keywords: [], history: [], currentDownload: null };
+const defaultCurrent = { channel: null, title: null, username: null };
+let store = { channels: [], keywords: [], history: [], currentDownload: { ...defaultCurrent } };
 // create initial db.json if not exists
 if (!fs.existsSync(dbPath)) {
   fs.writeFileSync(dbPath, JSON.stringify(store, null, 2));
@@ -17,7 +18,7 @@ const db = {
   data: store,
   async read() {
     if (!fs.existsSync(dbPath)) {
-      store = { channels: [], keywords: [], history: [], currentDownload: null };
+      store = { channels: [], keywords: [], history: [], currentDownload: { ...defaultCurrent } };
       fs.writeFileSync(dbPath, JSON.stringify(store, null, 2));
     } else {
       try {
@@ -28,7 +29,19 @@ const db = {
         if (!Array.isArray(store.channels)) { store.channels = []; updated = true; }
         if (!Array.isArray(store.keywords)) { store.keywords = []; updated = true; }
         if (!Array.isArray(store.history))  { store.history  = []; updated = true; }
-        if (!('currentDownload' in store))   { store.currentDownload = null; updated = true; }
+        // enforce shape of currentDownload
+        if (typeof store.currentDownload !== 'object' || !store.currentDownload) {
+          store.currentDownload = { ...defaultCurrent };
+          updated = true;
+        } else {
+          // ensure each field exists
+          Object.keys(defaultCurrent).forEach(k => {
+            if (!(k in store.currentDownload)) {
+              store.currentDownload[k] = defaultCurrent[k];
+              updated = true;
+            }
+          });
+        }
         // remove any legacy or unused properties
         const allowed = ['channels','keywords','history','currentDownload'];
         Object.keys(store).forEach(key => {
@@ -41,7 +54,7 @@ const db = {
           fs.writeFileSync(dbPath, JSON.stringify(store, null, 2));
         }
       } catch {
-        store = { channels: [], keywords: [], history: [], currentDownload: null };
+        store = { channels: [], keywords: [], history: [], currentDownload: { ...defaultCurrent } };
         fs.writeFileSync(dbPath, JSON.stringify(store, null, 2));
       }
     }
