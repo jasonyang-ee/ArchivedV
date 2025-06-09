@@ -26,6 +26,15 @@ const app = express();
 // Admin credentials for session login
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASS = process.env.ADMIN_PASS || 'password';
+const PORT = process.env.PORT || 3000;
+const DOWNLOAD_DIR = path.resolve(process.cwd(), "download");
+
+// Pushover setup
+const push = new Pushover({
+  token: process.env.PUSHOVER_APP_TOKEN || "",
+  user: process.env.PUSHOVER_USER_TOKEN || "",
+});
+
 
 // Session and login setup
 app.use(express.urlencoded({ extended: false }));
