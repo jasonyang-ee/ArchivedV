@@ -25,6 +25,12 @@ The purpose of this project is to save Vtuber singing streams where often are un
 
 ![main page](doc/mainpage.png)
 
+## Public Tracking Service
+
+This service is tracking all EN and ID branch. Video will be periodically deleted to free up space.
+
+https://archivedv.jasony.org
+
 ## Public Docker Image
 
 >[Docker Hub](https://hub.docker.com/r/jasonyangee/archivedv)
