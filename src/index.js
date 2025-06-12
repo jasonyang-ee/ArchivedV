@@ -9,6 +9,8 @@ const { spawn } = require("child_process");
 const Pushover = require("pushover-notifications");
 const fs = require("fs");
 const { db } = require("./db");
+const session = require('express-session');
+
 
 // Status tracking
 const status = {
@@ -20,9 +22,10 @@ const status = {
 
 const app = express();
 
-// HTTP Basic Auth credentials
-const ADMIN_USER = process.env.ADMIN_USER || "admin";
-const ADMIN_PASS = process.env.ADMIN_PASS || "password";
+
+// Admin credentials for session login
+const ADMIN_USER = process.env.ADMIN_USER || 'admin';
+const ADMIN_PASS = process.env.ADMIN_PASS || 'password';
 const PORT = process.env.PORT || 3000;
 const DOWNLOAD_DIR = path.resolve(process.cwd(), "download");
 
@@ -32,16 +35,21 @@ const push = new Pushover({
   user: process.env.PUSHOVER_USER_TOKEN || "",
 });
 
-// Basic Auth middleware
+
+// Session and login setup
+app.use(express.urlencoded({ extended: false }));
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'secret',
+  resave: false,
+  saveUninitialized: false,
+}));
+
+// Middleware to require login
 function adminAuth(req, res, next) {
-  const auth = req.headers.authorization || "";
-  const [scheme, encoded] = auth.split(' ');
-  if (scheme === 'Basic' && encoded) {
-    const [user, pass] = Buffer.from(encoded, 'base64').toString().split(':');
-    if (user === ADMIN_USER && pass === ADMIN_PASS) return next();
+  if (req.session && req.session.authenticated) {
+    return next();
   }
-  res.set('WWW-Authenticate', 'Basic realm="Admin"');
-  return res.status(401).send('Authentication required.');
+  return res.redirect('/login');
 }
 
 // XML parser that strips namespace prefixes
@@ -57,6 +65,22 @@ function sanitize(str) {
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
+
+// Login and logout routes
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+app.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  if (username === ADMIN_USER && password === ADMIN_PASS) {
+    req.session.authenticated = true;
+    return res.redirect('/');
+  }
+  return res.redirect('/login?error=1');
+});
+app.get('/logout', (req, res) => {
+  req.session.destroy(() => res.redirect('/login'));
+});
 
 // serve favicon from src root folder
 app.use("/favicon.ico", express.static(path.join(__dirname, "Logo.ico")));
@@ -218,11 +242,7 @@ async function checkUpdates() {
         fs.mkdirSync(dir, { recursive: true });
         // record current download in DB
         await db.read();
-        db.data.currentDownload = {
-          channel: ch.id,
-          title,
-          username: ch.username,
-        };
+        db.data.currentDownload = { channel: ch.id, title, username: ch.username };
         await db.write();
         // download with prefixed logging
         const proc = spawn(
@@ -276,9 +296,9 @@ async function checkUpdates() {
         // update status after completion
         status.lastCompleted = title;
         status.current = null;
-        await db.read();
-        db.data.currentDownload = null;
-        await db.write();
+		await db.read();
+		db.data.currentDownload = null;
+		await db.write();
         if (process.env.PUSHOVER_APP_TOKEN && process.env.PUSHOVER_USER_TOKEN) {
           // send notification via Pushover
           push.send({ message: `Downloaded: ${title}`, title }, () => {});
@@ -334,9 +354,7 @@ app.post("/api/refresh", async (req, res) => {
   // reset current download only
   status.current = null;
   // kick off checkUpdates asynchronously
-  checkUpdates().catch((err) =>
-    console.error(`[Archived V] Refresh error:`, err)
-  );
+  checkUpdates().catch((err) => console.error(`[Archived V] Refresh error:`, err));
   // respond immediately with merged status
   const s = await getStatus();
   res.json(s);
