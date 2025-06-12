@@ -9,8 +9,6 @@ const { spawn } = require("child_process");
 const Pushover = require("pushover-notifications");
 const fs = require("fs");
 const { db } = require("./db");
-const session = require('express-session');
-
 
 // Status tracking
 const status = {
@@ -22,25 +20,22 @@ const status = {
 
 const app = express();
 
-
-// Admin credentials for session login
+// Admin credentials for Basic Auth
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASS = process.env.ADMIN_PASS || 'password';
 
-// Session and login setup
-app.use(express.urlencoded({ extended: false }));
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'secret',
-  resave: false,
-  saveUninitialized: false,
-}));
-
-// Middleware to require login
+// Basic Auth middleware for admin-only access to main UI
 function adminAuth(req, res, next) {
-  if (req.session && req.session.authenticated) {
-    return next();
+  const auth = req.headers.authorization || '';
+  const [scheme, encoded] = auth.split(' ');
+  if (scheme === 'Basic' && encoded) {
+    const [user, pass] = Buffer.from(encoded, 'base64').toString().split(':');
+    if (user === ADMIN_USER && pass === ADMIN_PASS) {
+      return next();
+    }
   }
-  return res.redirect('/login');
+  res.set('WWW-Authenticate', 'Basic realm="Admin Area"');
+  return res.status(401).send('Authentication required.');
 }
 
 // XML parser that strips namespace prefixes
@@ -56,23 +51,6 @@ function sanitize(str) {
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
-
-// Login and logout routes
-app.get('/login', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'login.html'));
-});
-app.post('/login', (req, res) => {
-  const { username, password } = req.body;
-  if (username === ADMIN_USER && password === ADMIN_PASS) {
-    req.session.authenticated = true;
-    return res.redirect('/');
-  }
-  return res.redirect('/login?error=1');
-});
-app.get('/logout', (req, res) => {
-  req.session.destroy(() => res.redirect('/login'));
-});
-
 // serve favicon from src root folder
 app.use("/favicon.ico", express.static(path.join(__dirname, "Logo.ico")));
 
@@ -161,7 +139,7 @@ app.delete("/api/keywords/:keyword", async (req, res) => {
   res.json({ success: true });
 });
 
-// Protected UI route
+// Serve UI
 app.get("/", adminAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "public/index.html"));
 });
