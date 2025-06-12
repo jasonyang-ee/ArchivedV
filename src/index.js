@@ -19,24 +19,14 @@ const status = {
 };
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+const DOWNLOAD_DIR = path.resolve(process.cwd(), "download");
 
-// Admin credentials for Basic Auth
-const ADMIN_USER = process.env.ADMIN_USER || 'admin';
-const ADMIN_PASS = process.env.ADMIN_PASS || 'password';
-
-// Basic Auth middleware for admin-only access to main UI
-function adminAuth(req, res, next) {
-  const auth = req.headers.authorization || '';
-  const [scheme, encoded] = auth.split(' ');
-  if (scheme === 'Basic' && encoded) {
-    const [user, pass] = Buffer.from(encoded, 'base64').toString().split(':');
-    if (user === ADMIN_USER && pass === ADMIN_PASS) {
-      return next();
-    }
-  }
-  res.set('WWW-Authenticate', 'Basic realm="Admin Area"');
-  return res.status(401).send('Authentication required.');
-}
+// Pushover setup
+const push = new Pushover({
+  token: process.env.PUSHOVER_APP_TOKEN || "",
+  user: process.env.PUSHOVER_USER_TOKEN || "",
+});
 
 // XML parser that strips namespace prefixes
 const xmlParser = new Parser({
@@ -140,7 +130,7 @@ app.delete("/api/keywords/:keyword", async (req, res) => {
 });
 
 // Serve UI
-app.get("/", adminAuth, (req, res) => {
+app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public/index.html"));
 });
 
