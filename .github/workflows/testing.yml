@@ -3,7 +3,7 @@ name: 'Testing'
 on:
   push:
     branches:
-      - 'test'
+      - 'test*'
 
 jobs:
   Build_Upload:
