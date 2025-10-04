@@ -191,13 +191,22 @@ async function checkUpdates() {
         }
         // create folder and download
         fs.mkdirSync(dir, { recursive: true });
-        // download with default logging to console
+        // record current download in DB
+        await db.read();
+        db.data.currentDownload = {
+          channel: ch.id,
+          title,
+          username: ch.username,
+        };
+        await db.write();
+        // download with prefixed logging and stderr capture
         const proc = spawn(
           "yt-dlp",
           [
             "--live-from-start",
             "-ciw",
             "--no-progress",
+            "--no-cache-dir",
             "-o",
             path.join(dir, "%(title)s.%(ext)s"),
             "--embed-thumbnail",
@@ -206,16 +215,66 @@ async function checkUpdates() {
             "mp4",
             videoLink,
           ],
-          { stdio: "inherit" }
+          { stdio: ["pipe", "pipe", "pipe"] }
         );
+        let stderr = "";
+        // prefix stdout from yt-dlp
+        proc.stdout.on("data", (chunk) => {
+          chunk
+            .toString()
+            .split(/\r?\n/)
+            .forEach((line) => {
+              if (line) console.log(`[yt-dlp] ${line}`);
+            });
+        });
+        // capture and prefix stderr for error/skip detection
+        proc.stderr.on("data", (chunk) => {
+          const text = chunk.toString();
+          stderr += text;
+          text.split(/\r?\n/).forEach((line) => {
+            if (line) console.warn(`[yt-dlp] ${line}`);
+          });
+        });
         await new Promise((res, rej) =>
-          proc.on("close", (code) =>
-            code === 0 ? res() : rej(new Error("download failed"))
-          )
+          proc.on("close", (code) => {
+            if (code === 0) {
+              // clear currentDownload after yt-dlp completes
+              (async () => {
+                await db.read();
+                db.data.currentDownload = { channel: null, title: null, username: null };
+                await db.write();
+              })();
+              return res();
+            }
+            // Check if live event hasn't started yet
+            if (stderr.includes("This live event will begin")) {
+              console.warn(
+                `[Archived V] Live event for "${title}" hasn't started yet, skipping.`
+              );
+              // clear currentDownload and resolve without error
+              (async () => {
+                await db.read();
+                db.data.currentDownload = { channel: null, title: null, username: null };
+                await db.write();
+              })();
+              return res();
+            }
+            // clear on failure too
+            (async () => {
+              await db.read();
+              db.data.currentDownload = { channel: null, title: null, username: null };
+              await db.write();
+            })();
+            return rej(new Error("download failed"));
+          })
         );
         // update status after completion
         status.lastCompleted = title;
         status.current = null;
+        // ensure currentDownload is cleared (redundant safety)
+        await db.read();
+        db.data.currentDownload = { channel: null, title: null, username: null };
+        await db.write();
         if (process.env.PUSHOVER_APP_TOKEN && process.env.PUSHOVER_USER_TOKEN) {
           // send notification via Pushover
           push.send({ message: `Downloaded: ${title}`, title }, () => {});
