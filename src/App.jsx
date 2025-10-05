@@ -140,7 +140,7 @@ function App() {
       {/* Main Content with New Layout */}
       <main className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Three Column Layout: Left Sidebar (Keywords) | Center (Status) | Right Sidebar (Channels) */}
-        <div className="grid grid-cols-1 min-[1420px]:grid-cols-[320px_1fr_384px] gap-6">
+        <div className="grid grid-cols-1 min-[1420px]:grid-cols-[380px_minmax(600px,1fr)_480px] gap-6">
           
           {/* Left Sidebar - Keywords */}
           <div className="space-y-6">

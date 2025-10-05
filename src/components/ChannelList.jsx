@@ -24,7 +24,7 @@ function ChannelList({ channels, onAddChannel, onDeleteChannel }) {
   return (
     <div className="card">
       <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">
-        Channels ({channels.length})
+        Channels
       </h2>
 
       {/* Channel List */}
@@ -46,7 +46,7 @@ function ChannelList({ channels, onAddChannel, onDeleteChannel }) {
                     {channel.username}
                   </h3>
                   <div className="mt-1 space-y-1">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 font-mono truncate">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 font-mono break-all">
                       Channel ID: {channel.id}
                     </p>
                     <a
@@ -92,14 +92,14 @@ function ChannelList({ channels, onAddChannel, onDeleteChannel }) {
             value={channelInput}
             onChange={(e) => setChannelInput(e.target.value)}
             onKeyPress={(e) => e.key === "Enter" && handleAdd()}
-            placeholder="YouTube Channel URL or Handle (@username)"
+            placeholder="YouTube Channel URL"
             className="input flex-1"
             disabled={isAdding}
           />
           <button
             onClick={handleAdd}
             disabled={isAdding || !channelInput.trim()}
-            className="btn btn-primary px-6 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isAdding ? "Adding..." : "Add"}
           </button>

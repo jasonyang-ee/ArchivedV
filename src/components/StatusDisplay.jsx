@@ -13,7 +13,7 @@ function StatusDisplay({ status, onRefresh }) {
         <button
           onClick={onRefresh}
           disabled={isDownloading}
-          className="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           <svg
             className={`w-4 h-4 ${isDownloading ? "animate-spin" : ""}`}
@@ -34,42 +34,32 @@ function StatusDisplay({ status, onRefresh }) {
 
       <div className="space-y-4">
         {/* Last Run */}
-        <div className="flex justify-between items-start p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
+        <div className="grid grid-cols-[140px_1fr] gap-4 items-start p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
             Last Run:
           </span>
-          <span className="text-sm text-gray-600 dark:text-gray-400 text-right">
+          <span className="text-sm text-gray-600 dark:text-gray-400">
             {status.lastRun ? formatDate(status.lastRun) : "Never"}
           </span>
         </div>
 
         {/* Currently Downloading */}
-        <div className="flex justify-between items-start p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
+        <div className="grid grid-cols-[140px_1fr] gap-4 items-start p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
             Currently Downloading:
           </span>
-          <span className="text-sm text-gray-600 dark:text-gray-400 text-right max-w-xs truncate">
+          <span className="text-sm text-gray-600 dark:text-gray-400 break-words">
             {status.current || "None"}
           </span>
         </div>
 
         {/* Last Completed */}
-        <div className="flex justify-between items-start p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
+        <div className="grid grid-cols-[140px_1fr] gap-4 items-start p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
             Last Completed:
           </span>
-          <span className="text-sm text-gray-600 dark:text-gray-400 text-right max-w-xs truncate">
+          <span className="text-sm text-gray-600 dark:text-gray-400 break-words">
             {status.lastCompleted || "None"}
-          </span>
-        </div>
-
-        {/* Total Downloaded */}
-        <div className="flex justify-between items-start p-3 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-800">
-          <span className="text-sm font-medium text-primary-700 dark:text-primary-300">
-            Total Downloaded:
-          </span>
-          <span className="text-sm font-bold text-primary-600 dark:text-primary-400">
-            {status.downloadedCount || 0} videos
           </span>
         </div>
       </div>

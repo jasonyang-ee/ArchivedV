@@ -12,7 +12,7 @@ function KeywordList({ keywords, onAddKeyword, onDeleteKeyword }) {
   return (
     <div className="card">
       <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">
-        Keywords ({keywords.length})
+        Keywords
       </h2>
 
       {/* Keyword List */}
@@ -57,13 +57,13 @@ function KeywordList({ keywords, onAddKeyword, onDeleteKeyword }) {
           value={keywordInput}
           onChange={(e) => setKeywordInput(e.target.value)}
           onKeyPress={(e) => e.key === "Enter" && handleAdd()}
-          placeholder="Enter keyword (e.g., singing, karaoke)"
+          placeholder="Enter Keyword"
           className="input flex-1"
         />
         <button
           onClick={handleAdd}
           disabled={!keywordInput.trim()}
-          className="btn btn-primary px-6 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Add
         </button>
