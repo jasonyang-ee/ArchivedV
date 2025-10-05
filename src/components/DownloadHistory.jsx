@@ -18,7 +18,7 @@ function DownloadHistory({ history, onClearHistory }) {
         )}
       </div>
 
-      <div className="space-y-2 max-h-[500px] overflow-y-auto">
+      <div className="space-y-1.5 max-h-[500px] overflow-y-auto">
         {history.length === 0 ? (
           <div className="text-center py-12 text-gray-500 dark:text-gray-400">
             <svg
@@ -41,30 +41,17 @@ function DownloadHistory({ history, onClearHistory }) {
           [...history].reverse().map((item, index) => (
             <div
               key={`${item.time}-${index}`}
-              className="p-4 bg-gray-50 dark:bg-[#333333] rounded-lg border border-gray-200 dark:border-[#444444] hover:shadow-md transition-shadow"
+              className="p-2 bg-gray-50 dark:bg-[#333333] rounded-lg border border-gray-200 dark:border-[#444444] hover:shadow-md transition-shadow"
             >
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-2">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1 break-words">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 break-words">
                     {item.title}
                   </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                     {formatDate(item.time)}
                   </p>
                 </div>
-                <svg
-                  className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
               </div>
             </div>
           ))
