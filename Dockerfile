@@ -8,7 +8,11 @@ RUN apk add --no-cache \
     ffmpeg \
     curl \
 	ca-certificates \
+	openssl \
 	bash
+
+# Update CA certificates
+RUN update-ca-certificates
 
 # Install yt-dlp
 RUN pip3 install --no-cache-dir yt-dlp --break-system-packages
