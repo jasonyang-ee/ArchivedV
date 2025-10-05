@@ -17,6 +17,21 @@ function App() {
   });
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [darkMode, setDarkMode] = useState(() => {
+    // Initialize from localStorage or default to true
+    const saved = localStorage.getItem('darkMode');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  // Apply dark mode class to document
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('darkMode', JSON.stringify(darkMode));
+  }, [darkMode]);
 
   // Load initial data
   useEffect(() => {
@@ -135,7 +150,7 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-[#1f1f1f]">
       {/* Wide Header */}
-      <Header />
+      <Header darkMode={darkMode} toggleDarkMode={() => setDarkMode(!darkMode)} />
 
       {/* Main Content with New Layout */}
       <main className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">

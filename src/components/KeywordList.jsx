@@ -63,14 +63,11 @@ function KeywordList({ keywords, onAddKeyword, onDeleteKeyword }) {
         <button
           onClick={handleAdd}
           disabled={!keywordInput.trim()}
-          className="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Add
         </button>
       </div>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-        Videos matching any keyword will be downloaded
-      </p>
     </div>
   );
 }

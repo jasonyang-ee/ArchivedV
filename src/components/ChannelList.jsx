@@ -99,14 +99,11 @@ function ChannelList({ channels, onAddChannel, onDeleteChannel }) {
           <button
             onClick={handleAdd}
             disabled={isAdding || !channelInput.trim()}
-            className="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isAdding ? "Adding..." : "Add"}
           </button>
         </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          Supports: @username, channel URLs, or feed URLs
-        </p>
       </div>
     </div>
   );
