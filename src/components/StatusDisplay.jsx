@@ -13,11 +13,10 @@ function StatusDisplay({ status, onRefresh }) {
         </h2>
         <button
           onClick={onRefresh}
-          disabled={isDownloading}
-          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
         >
           <svg
-            className={`w-4 h-4 ${isDownloading ? "animate-spin" : ""}`}
+            className="w-4 h-4"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -29,60 +28,12 @@ function StatusDisplay({ status, onRefresh }) {
               d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
             />
           </svg>
-          {isDownloading ? "Downloading..." : "Refresh Now"}
+          Refresh Now
         </button>
       </div>
 
-      <div className="space-y-4">
-        {/* Last Run */}
-        <div className="grid grid-cols-[140px_1fr] gap-4 items-start p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Last Run:
-          </span>
-          <span className="text-sm text-gray-600 dark:text-gray-400">
-            {status.lastRun ? formatDate(status.lastRun) : "Never"}
-          </span>
-        </div>
-
-        {/* Currently Downloading */}
-        <div className="p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
-          <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Currently Downloading:
-          </div>
-          {currentDownloads.length === 0 ? (
-            <div className="text-sm text-gray-600 dark:text-gray-400">None</div>
-          ) : (
-            <div className="space-y-2">
-              {currentDownloads.map((download) => (
-                <div
-                  key={download.id}
-                  className="p-2 bg-white dark:bg-[#2a2a2a] rounded border border-gray-200 dark:border-[#444444]"
-                >
-                  <div className="text-sm text-gray-900 dark:text-gray-100 font-medium break-words">
-                    {download.title}
-                  </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Channel: {download.channelName || download.username} • Started: {formatDate(download.startTime)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Last Completed */}
-        <div className="grid grid-cols-[140px_1fr] gap-4 items-start p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Last Completed:
-          </span>
-          <span className="text-sm text-gray-600 dark:text-gray-400 break-words">
-            {status.lastCompleted || "None"}
-          </span>
-        </div>
-      </div>
-
       {/* Info Banner */}
-      <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+      <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
         <div className="flex items-start gap-2">
           <svg
             className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5"
@@ -101,6 +52,74 @@ function StatusDisplay({ status, onRefresh }) {
             <p className="font-medium mb-1">Automatic checking every 10 minutes</p>
             <p>Videos are downloaded to the download folder organized by channel.</p>
           </div>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {/* Last Run */}
+        <div className="grid grid-cols-[140px_1fr] gap-4 items-start p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            Last Run:
+          </span>
+          <span className="text-sm text-gray-600 dark:text-gray-400">
+            {status.lastRun ? formatDate(status.lastRun) : "Never"}
+          </span>
+        </div>
+
+        {/* Last Completed */}
+        <div className="grid grid-cols-[140px_1fr] gap-4 items-start p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            Last Completed:
+          </span>
+          <span className="text-sm text-gray-600 dark:text-gray-400 break-words">
+            {status.lastCompleted || "None"}
+          </span>
+        </div>
+
+        {/* Currently Downloading */}
+        <div className="p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
+          <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Currently Downloading:
+            {isDownloading && (
+              <span className="text-xs text-amber-600 dark:text-amber-500 font-semibold ml-2">
+                ({currentDownloads.length})
+              </span>
+            )}
+          </div>
+          {currentDownloads.length === 0 ? (
+            <div className="text-sm text-gray-600 dark:text-gray-400">None</div>
+          ) : (
+            <div className="space-y-2">
+              {currentDownloads.map((download) => (
+                <div
+                  key={download.id}
+                  className="p-2 bg-white dark:bg-[#2a2a2a] rounded border border-gray-200 dark:border-[#444444] flex items-start justify-between gap-2"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-gray-900 dark:text-gray-100 font-medium break-words">
+                      {download.title}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Channel: {download.channelName || download.username} • Started: {formatDate(download.startTime)}
+                    </div>
+                  </div>
+                  <svg
+                    className="w-5 h-5 animate-spin text-amber-600 dark:text-amber-500 flex-shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
