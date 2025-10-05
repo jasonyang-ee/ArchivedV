@@ -417,4 +417,8 @@ cron.schedule("*/10 * * * *", () => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+  
+  // Run initial check for new streams on startup
+  console.log("Running initial check for new streams...");
+  checkUpdates().catch((err) => console.error("Startup refresh error:", err));
 });
