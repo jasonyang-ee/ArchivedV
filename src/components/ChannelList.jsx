@@ -21,6 +21,13 @@ function ChannelList({ channels, onAddChannel, onDeleteChannel }) {
     }
   };
 
+  // Sort channels alphabetically by channel name (or username if no channel name)
+  const sortedChannels = [...channels].sort((a, b) => {
+    const nameA = (a.channelName || a.username).toLowerCase();
+    const nameB = (b.channelName || b.username).toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
+
   return (
     <div className="card">
       <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">
@@ -29,13 +36,13 @@ function ChannelList({ channels, onAddChannel, onDeleteChannel }) {
 
       {/* Channel List */}
       <div className="space-y-1.5 mb-4 max-h-[1000px] overflow-y-auto">
-        {channels.length === 0 ? (
+        {sortedChannels.length === 0 ? (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             <p>No channels added yet</p>
             <p className="text-sm mt-2">Add your first YouTube channel below</p>
           </div>
         ) : (
-          channels.map((channel) => (
+          sortedChannels.map((channel) => (
             <div
               key={channel.id}
               className="p-2 bg-gray-50 dark:bg-[#333333] rounded-lg border border-gray-200 dark:border-[#444444] hover:shadow-md transition-shadow"
