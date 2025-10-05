@@ -165,8 +165,7 @@ async function checkUpdates() {
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
         const day = String(now.getDate()).padStart(2, '0');
-        const hour = String(now.getHours()).padStart(2, '0');
-        const datePrefix = `[${year}-${month}-${day}-${hour}]`;
+        const datePrefix = `[${year}-${month}-${day}] `;
         const folderName = `${datePrefix}${sanitize(title)}`;
         const dir = path.join(channelDir, folderName);
         // update status for UI
@@ -174,26 +173,37 @@ async function checkUpdates() {
         // only proceed if title matches any keyword (empty list now skips all)
         const match = keywords.some((k) => title.toLowerCase().includes(k));
         if (!match) continue;
-        // skip if already downloaded (folder with files exists), handle missing dir gracefully
-        let files;
-        let dirExists = true;
+        // skip if already downloaded - check all folders and compare sanitized title only
+        const sanitizedTitle = sanitize(title);
+        let alreadyDownloaded = false;
         try {
-          files = fs.readdirSync(dir);
+          const channelFolders = fs.readdirSync(channelDir, { withFileTypes: true });
+          for (const folder of channelFolders) {
+            if (folder.isDirectory()) {
+              // strip date-time prefix pattern [YYYY-MM-DD-hh] or [YYYY-MM-DD]
+              const folderTitle = folder.name.replace(/^\[\d{4}-\d{2}-\d{2}(?:-\d{2})?\]\s*/, '');
+              if (folderTitle === sanitizedTitle) {
+                // check if folder has files
+                const folderPath = path.join(channelDir, folder.name);
+                const files = fs.readdirSync(folderPath);
+                if (files.length > 0) {
+                  alreadyDownloaded = true;
+                  break;
+                } else {
+                  // empty folder, remove to retry download
+                  fs.rmdirSync(folderPath, { recursive: true });
+                }
+              }
+            }
+          }
         } catch (e) {
-          if (e.code === "ENOENT") {
-            dirExists = false;
-          } else {
+          if (e.code !== "ENOENT") {
             throw e;
           }
         }
-        if (dirExists) {
-          if (files.length > 0) {
-            // already downloaded
-            continue;
-          } else {
-            // empty folder, remove to retry download
-            fs.rmdirSync(dir, { recursive: true });
-          }
+        if (alreadyDownloaded) {
+          // already downloaded
+          continue;
         }
         // create folder and download
         fs.mkdirSync(dir, { recursive: true });
