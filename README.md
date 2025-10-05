@@ -23,7 +23,7 @@ The purpose of this project is to save Vtuber singing streams where often are un
 
 ## Screenshot
 
-![main page](doc/mainpage.png)
+![main page](doc/screenshot.png)
 
 ## Public Tracking Service
 
