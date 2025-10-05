@@ -77,7 +77,7 @@ Access the web interface at `http://<host_ip>:3000`
 Bind mounts to preserve data:
 
 - **Configurations**: `/app/data/db.json`
-- **Downloaded Videos**: `/app/download/<channel_username>/<video_title>/`
+- **Downloaded Videos**: `/app/download/<channel_username>/[DateTime] <video_title>/`
 
 ## Scheduling
 
