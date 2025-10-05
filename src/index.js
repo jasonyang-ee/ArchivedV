@@ -160,8 +160,14 @@ async function checkUpdates() {
         const title = entry.title[0];
         const linkObj = entry.link.find((l) => l.$ && l.$.href);
         const videoLink = linkObj ? linkObj.$.href : ch.link;
-        // use title for folder name
-        const folderName = sanitize(title);
+        // use title for folder name with date-time prefix in brackets
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hour = String(now.getHours()).padStart(2, '0');
+        const datePrefix = `[${year}-${month}-${day}-${hour}]`;
+        const folderName = `${datePrefix}${sanitize(title)}`;
         const dir = path.join(channelDir, folderName);
         // update status for UI
         status.current = title;
