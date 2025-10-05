@@ -1,12 +1,11 @@
 services:
   archivedv:
     build: .
-    # image: jasonyangee/archivedv:latest
     container_name: archivedv
     restart: unless-stopped
     user: "1000:1000"
     ports:
-      - "3200:3000"
+      - "3000:3000"
     volumes:
       - ./data:/app/data
       - ./download:/app/download
