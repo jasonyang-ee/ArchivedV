@@ -235,7 +235,7 @@ async function checkUpdates() {
             if (line) console.warn(`[yt-dlp] ${line}`);
           });
         });
-        await new Promise((res, rej) =>
+        const downloadResult = await new Promise((res, rej) =>
           proc.on("close", (code) => {
             if (code === 0) {
               // clear currentDownload after yt-dlp completes
@@ -244,7 +244,7 @@ async function checkUpdates() {
                 db.data.currentDownload = { channel: null, title: null, username: null };
                 await db.write();
               })();
-              return res();
+              return res({ success: true });
             }
             // Check if live event hasn't started yet
             if (stderr.includes("This live event will begin")) {
@@ -257,7 +257,13 @@ async function checkUpdates() {
                 db.data.currentDownload = { channel: null, title: null, username: null };
                 await db.write();
               })();
-              return res();
+              // remove empty folder since download was skipped
+              try {
+                fs.rmdirSync(dir, { recursive: true });
+              } catch (e) {
+                // ignore cleanup errors
+              }
+              return res({ success: false, skipped: true });
             }
             // clear on failure too
             (async () => {
@@ -268,22 +274,29 @@ async function checkUpdates() {
             return rej(new Error("download failed"));
           })
         );
-        // update status after completion
-        status.lastCompleted = title;
-        status.current = null;
-        // ensure currentDownload is cleared (redundant safety)
-        await db.read();
-        db.data.currentDownload = { channel: null, title: null, username: null };
-        await db.write();
-        if (process.env.PUSHOVER_APP_TOKEN && process.env.PUSHOVER_USER_TOKEN) {
-          // send notification via Pushover
-          push.send({ message: `Downloaded: ${title}`, title }, () => {});
+        
+        // Only update status, send notification, and record history if download succeeded
+        if (downloadResult.success) {
+          // update status after completion
+          status.lastCompleted = title;
+          status.current = null;
+          // ensure currentDownload is cleared (redundant safety)
+          await db.read();
+          db.data.currentDownload = { channel: null, title: null, username: null };
+          await db.write();
+          if (process.env.PUSHOVER_APP_TOKEN && process.env.PUSHOVER_USER_TOKEN) {
+            // send notification via Pushover
+            push.send({ message: `Downloaded: ${title}`, title }, () => {});
+          }
+          // record download history
+          await db.read();
+          db.data.history.push({ title, time: new Date().toISOString() });
+          await db.write();
+          count++;
+        } else if (downloadResult.skipped) {
+          // just clear current status for skipped downloads
+          status.current = null;
         }
-        // record download history
-        await db.read();
-        db.data.history.push({ title, time: new Date().toISOString() });
-        await db.write();
-        count++;
       }
     } catch (e) {
       if (e.code === "ETIMEDOUT") {
