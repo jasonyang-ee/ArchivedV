@@ -28,7 +28,7 @@ function ChannelList({ channels, onAddChannel, onDeleteChannel }) {
       </h2>
 
       {/* Channel List */}
-      <div className="space-y-2 mb-4 max-h-[800px] overflow-y-auto">
+      <div className="space-y-1.5 mb-4 max-h-[1000px] overflow-y-auto">
         {channels.length === 0 ? (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             <p>No channels added yet</p>
@@ -38,30 +38,30 @@ function ChannelList({ channels, onAddChannel, onDeleteChannel }) {
           channels.map((channel) => (
             <div
               key={channel.id}
-              className="p-2.5 bg-gray-50 dark:bg-[#333333] rounded-lg border border-gray-200 dark:border-[#444444] hover:shadow-md transition-shadow"
+              className="p-2 bg-gray-50 dark:bg-[#333333] rounded-lg border border-gray-200 dark:border-[#444444] hover:shadow-md transition-shadow"
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100 truncate">
-                    {channel.username}
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                    {channel.channelName || channel.username}
                   </h3>
-                  <div className="mt-0.5 space-y-0.5">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 font-mono break-all">
-                      Channel ID: {channel.id}
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      @{channel.username}
                     </p>
                     <a
                       href={`https://www.youtube.com/@${channel.username}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-primary-600 dark:text-primary-400 hover:underline inline-block"
+                      className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
                     >
-                      View on YouTube →
+                      View →
                     </a>
                   </div>
                 </div>
                 <button
                   onClick={() => onDeleteChannel(channel.id)}
-                  className="ml-2 p-1.5 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                  className="ml-2 p-1 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
                   title="Delete channel"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -92,7 +92,7 @@ function ChannelList({ channels, onAddChannel, onDeleteChannel }) {
             value={channelInput}
             onChange={(e) => setChannelInput(e.target.value)}
             onKeyPress={(e) => e.key === "Enter" && handleAdd()}
-            placeholder="YouTube Channel URL"
+            placeholder="@username or YouTube URL"
             className="input flex-1"
             disabled={isAdding}
           />

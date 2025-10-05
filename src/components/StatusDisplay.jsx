@@ -62,7 +62,7 @@ function StatusDisplay({ status, onRefresh }) {
                     {download.title}
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Channel: {download.username} • Started: {formatDate(download.startTime)}
+                    Channel: {download.channelName || download.username} • Started: {formatDate(download.startTime)}
                   </div>
                 </div>
               ))}

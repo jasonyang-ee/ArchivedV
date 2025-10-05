@@ -115,11 +115,33 @@ app.post("/api/channels", async (req, res) => {
   let { link } = req.body;
   if (!link) return res.status(400).json({ error: "No link provided" });
   
+  // Trim whitespace
+  link = link.trim();
+  
   let id, xmlLink, username;
   
+  // Handle plain username input (with or without @)
+  // Match: @username, username (no spaces, no special URL characters)
+  const plainHandleMatch = link.match(/^@?([a-zA-Z0-9_-]+)$/);
+  if (plainHandleMatch) {
+    username = plainHandleMatch[1];
+    const aboutUrl = `https://www.youtube.com/@${username}/about`;
+    try {
+      const html = (await axios.get(aboutUrl)).data;
+      const canonMatch = html.match(
+        /<link rel="canonical" href="https:\/\/www\.youtube\.com\/channel\/([^\"]+)"/
+      );
+      if (!canonMatch)
+        return res.status(400).json({ error: "Unable to resolve handle to channel ID" });
+      id = canonMatch[1];
+    } catch {
+      return res.status(400).json({ error: "Failed to fetch channel page" });
+    }
+    xmlLink = `https://www.youtube.com/feeds/videos.xml?channel_id=${id}`;
+  }
   // Handle YouTube handle URLs (/@username)
-  const handleMatch = link.match(/youtube\.com\/@([^\/\?]+)/);
-  if (handleMatch) {
+  else if (link.match(/youtube\.com\/@([^\/\?]+)/)) {
+    const handleMatch = link.match(/youtube\.com\/@([^\/\?]+)/);
     username = handleMatch[1];
     const aboutUrl = `https://www.youtube.com/@${username}/about`;
     try {
@@ -154,13 +176,27 @@ app.post("/api/channels", async (req, res) => {
   
   db.read();
   const existing = db.data.channels.find((c) => c.id === id);
+  
+  // Try to fetch the actual channel name from RSS feed
+  let channelName = username;
+  try {
+    const xml = (await axios.get(xmlLink)).data;
+    const result = await xmlParser.parseStringPromise(xml);
+    if (result.feed.author && result.feed.author[0] && result.feed.author[0].name && result.feed.author[0].name[0]) {
+      channelName = result.feed.author[0].name[0];
+    }
+  } catch (e) {
+    console.warn("Failed to fetch channel name from RSS, using username");
+  }
+  
   if (!existing) {
-    db.data.channels.push({ id, link: xmlLink, username });
-  } else if (!existing.username) {
-    existing.username = username;
+    db.data.channels.push({ id, link: xmlLink, username, channelName });
+  } else {
+    if (!existing.username) existing.username = username;
+    if (!existing.channelName) existing.channelName = channelName;
   }
   db.write();
-  res.json({ id, link: xmlLink, username });
+  res.json({ id, link: xmlLink, username, channelName });
 });
 
 // API: Delete channel
@@ -245,6 +281,22 @@ async function checkUpdates() {
       const result = await xmlParser.parseStringPromise(xml);
       const entries = result.feed.entry || [];
       
+      // Extract actual channel name from RSS feed
+      let channelName = ch.username; // fallback to username
+      if (result.feed.author && result.feed.author[0] && result.feed.author[0].name && result.feed.author[0].name[0]) {
+        channelName = result.feed.author[0].name[0];
+        // Update channel name in database if not already set or different
+        if (!ch.channelName || ch.channelName !== channelName) {
+          db.read();
+          const channelToUpdate = db.data.channels.find(c => c.id === ch.id);
+          if (channelToUpdate) {
+            channelToUpdate.channelName = channelName;
+            db.write();
+          }
+          ch.channelName = channelName;
+        }
+      }
+      
       const channelDir = path.join(DOWNLOAD_DIR, ch.username);
       if (!fs.existsSync(channelDir))
         fs.mkdirSync(channelDir, { recursive: true });
@@ -270,6 +322,7 @@ async function checkUpdates() {
           channel: ch.id,
           title: title,
           username: ch.username,
+          channelName: ch.channelName || ch.username,
           startTime: new Date().toISOString()
         };
         status.currentDownloads.push(downloadInfo);
