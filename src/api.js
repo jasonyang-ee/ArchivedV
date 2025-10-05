@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.PROD ? "/api" : "http://localhost:3500/api";
+const API_BASE = import.meta.env.PROD ? "/api" : "http://localhost:3000/api";
 
 export const api = {
   // Config

@@ -6,13 +6,11 @@ services:
     restart: unless-stopped
     user: "1000:1000"
     ports:
-      - "3000:3000"
+      - "3200:3000"
     volumes:
       - ./data:/app/data
       - ./download:/app/download
     environment:
       TZ: America/Los_Angeles
-      NODE_ENV: production
-      PORT: 3000
       # PUSHOVER_APP_TOKEN: ${PUSHOVER_APP_TOKEN}
       # PUSHOVER_USER_TOKEN: ${PUSHOVER_USER_TOKEN}
