@@ -16,7 +16,7 @@ function KeywordList({ keywords, onAddKeyword, onDeleteKeyword }) {
       </h2>
 
       {/* Keyword List */}
-      <div className="space-y-2 mb-4 max-h-[400px] overflow-y-auto">
+      <div className="space-y-1.5 mb-4 max-h-[800px] overflow-y-auto">
         {keywords.length === 0 ? (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             <p>No keywords added yet</p>
@@ -26,14 +26,14 @@ function KeywordList({ keywords, onAddKeyword, onDeleteKeyword }) {
           keywords.map((keyword) => (
             <div
               key={keyword}
-              className="flex items-center justify-between p-3 bg-gray-50 dark:bg-[#333333] rounded-lg border border-gray-200 dark:border-[#444444] hover:shadow-md transition-shadow"
+              className="flex items-center justify-between p-2 bg-gray-50 dark:bg-[#333333] rounded-lg border border-gray-200 dark:border-[#444444] hover:shadow-md transition-shadow"
             >
-              <span className="text-gray-900 dark:text-gray-100 font-medium">
+              <span className="text-sm text-gray-900 dark:text-gray-100 font-medium">
                 {keyword}
               </span>
               <button
                 onClick={() => onDeleteKeyword(keyword)}
-                className="p-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                className="p-1.5 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                 title="Delete keyword"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
