@@ -2,7 +2,8 @@ import React from "react";
 import { formatDate } from "../utils";
 
 function StatusDisplay({ status, onRefresh }) {
-  const isDownloading = !!status.current;
+  const currentDownloads = status.currentDownloads || [];
+  const isDownloading = currentDownloads.length > 0;
 
   return (
     <div className="card">
@@ -44,13 +45,29 @@ function StatusDisplay({ status, onRefresh }) {
         </div>
 
         {/* Currently Downloading */}
-        <div className="grid grid-cols-[140px_1fr] gap-4 items-start p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+        <div className="p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
+          <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Currently Downloading:
-          </span>
-          <span className="text-sm text-gray-600 dark:text-gray-400 break-words">
-            {status.current || "None"}
-          </span>
+          </div>
+          {currentDownloads.length === 0 ? (
+            <div className="text-sm text-gray-600 dark:text-gray-400">None</div>
+          ) : (
+            <div className="space-y-2">
+              {currentDownloads.map((download) => (
+                <div
+                  key={download.id}
+                  className="p-2 bg-white dark:bg-[#2a2a2a] rounded border border-gray-200 dark:border-[#444444]"
+                >
+                  <div className="text-sm text-gray-900 dark:text-gray-100 font-medium break-words">
+                    {download.title}
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Channel: {download.username} • Started: {formatDate(download.startTime)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Last Completed */}

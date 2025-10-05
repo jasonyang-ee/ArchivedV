@@ -30,19 +30,33 @@ if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR, { recursive: true }
 
 // Database helper
 const db = {
-  data: { channels: [], keywords: [], history: [], currentDownload: { channel: null, title: null, username: null } },
+  data: { channels: [], keywords: [], history: [], currentDownloads: [] },
   read() {
     if (!fs.existsSync(DB_PATH)) {
-      this.data = { channels: [], keywords: [], history: [], currentDownload: { channel: null, title: null, username: null } };
+      this.data = { channels: [], keywords: [], history: [], currentDownloads: [] };
       fs.writeFileSync(DB_PATH, JSON.stringify(this.data, null, 2));
     } else {
       try {
         const file = fs.readFileSync(DB_PATH, "utf-8");
         this.data = JSON.parse(file);
         if (!this.data.history) this.data.history = [];
-        if (!this.data.currentDownload) this.data.currentDownload = { channel: null, title: null, username: null };
+        // Migrate old format to new format
+        if (this.data.currentDownload && !this.data.currentDownloads) {
+          this.data.currentDownloads = [];
+          if (this.data.currentDownload.title) {
+            this.data.currentDownloads.push({
+              id: Date.now().toString(),
+              channel: this.data.currentDownload.channel,
+              title: this.data.currentDownload.title,
+              username: this.data.currentDownload.username,
+              startTime: new Date().toISOString()
+            });
+          }
+          delete this.data.currentDownload;
+        }
+        if (!this.data.currentDownloads) this.data.currentDownloads = [];
       } catch {
-        this.data = { channels: [], keywords: [], history: [], currentDownload: { channel: null, title: null, username: null } };
+        this.data = { channels: [], keywords: [], history: [], currentDownloads: [] };
         fs.writeFileSync(DB_PATH, JSON.stringify(this.data, null, 2));
       }
     }
@@ -59,7 +73,7 @@ db.read();
 const status = {
   lastRun: null,
   downloadedCount: 0,
-  current: null,
+  currentDownloads: [],
   lastCompleted: null,
 };
 
@@ -220,7 +234,7 @@ app.post("/api/refresh", (req, res) => {
 // Download job
 async function checkUpdates() {
   db.read();
-  status.current = null;
+  status.currentDownloads = [];
   const channels = db.data.channels;
   const keywords = db.data.keywords.map((k) => k.toLowerCase());
   let count = 0;
@@ -249,10 +263,29 @@ async function checkUpdates() {
         const folderName = `${datePrefix}${sanitize(title)}`;
         const dir = path.join(channelDir, folderName);
         
-        status.current = title;
+        // Add to current downloads list
+        const downloadId = `${ch.id}-${videoId}-${Date.now()}`;
+        const downloadInfo = {
+          id: downloadId,
+          channel: ch.id,
+          title: title,
+          username: ch.username,
+          startTime: new Date().toISOString()
+        };
+        status.currentDownloads.push(downloadInfo);
+        db.read();
+        db.data.currentDownloads.push(downloadInfo);
+        db.write();
         
         const match = keywords.some((k) => title.toLowerCase().includes(k));
-        if (!match) continue;
+        if (!match) {
+          // Remove from current downloads if no match
+          status.currentDownloads = status.currentDownloads.filter(d => d.id !== downloadId);
+          db.read();
+          db.data.currentDownloads = db.data.currentDownloads.filter(d => d.id !== downloadId);
+          db.write();
+          continue;
+        }
         
         const sanitizedTitle = sanitize(title);
         let alreadyDownloaded = false;
@@ -327,8 +360,10 @@ async function checkUpdates() {
         const downloadResult = await new Promise((resolve, reject) =>
           proc.on("close", (code) => {
             const clearDownload = async () => {
+              // Remove from current downloads
+              status.currentDownloads = status.currentDownloads.filter(d => d.id !== downloadId);
               db.read();
-              db.data.currentDownload = { channel: null, title: null, username: null };
+              db.data.currentDownloads = db.data.currentDownloads.filter(d => d.id !== downloadId);
               db.write();
             };
             
@@ -353,11 +388,6 @@ async function checkUpdates() {
         
         if (downloadResult.success) {
           status.lastCompleted = title;
-          status.current = null;
-          
-          db.read();
-          db.data.currentDownload = { channel: null, title: null, username: null };
-          db.write();
           
           if (process.env.PUSHOVER_APP_TOKEN && process.env.PUSHOVER_USER_TOKEN) {
             push.send({ message: `Downloaded: ${title}`, title }, () => {});
@@ -367,8 +397,6 @@ async function checkUpdates() {
           db.data.history.push({ title, time: new Date().toISOString() });
           db.write();
           count++;
-        } else if (downloadResult.skipped) {
-          status.current = null;
         }
       }
     } catch (e) {
@@ -377,7 +405,6 @@ async function checkUpdates() {
       } else {
         console.error(e);
       }
-      status.current = null;
     }
   }
   
@@ -392,7 +419,6 @@ async function checkUpdates() {
     }
   }
   status.downloadedCount = total;
-  status.current = null;
 }
 
 // Serve React app in production
@@ -415,9 +441,8 @@ cron.schedule("*/10 * * * *", () => {
     day: "numeric",
   });
   console.log(`[${now.toISOString()}][${timeStr}] Scheduled Checking for New Streams`);
-  if (!status.current) {
-    checkUpdates().catch((err) => console.error("Cron error:", err));
-  }
+  // Always run check - it will handle concurrent downloads internally
+  checkUpdates().catch((err) => console.error("Cron error:", err));
 });
 
 app.listen(PORT, () => {
