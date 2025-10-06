@@ -9,6 +9,11 @@ function KeywordList({ keywords, onAddKeyword, onDeleteKeyword }) {
     setKeywordInput("");
   };
 
+  // Sort keywords alphabetically (case-insensitive)
+  const sortedKeywords = [...keywords].sort((a, b) => 
+    a.toLowerCase().localeCompare(b.toLowerCase())
+  );
+
   return (
     <div className="card">
       <h2 className="text-xl font-semibold mb-2 text-gray-900 dark:text-gray-100">
@@ -20,13 +25,13 @@ function KeywordList({ keywords, onAddKeyword, onDeleteKeyword }) {
 
       {/* Keyword List */}
       <div className="space-y-1.5 mb-4 max-h-[800px] overflow-y-auto">
-        {keywords.length === 0 ? (
+        {sortedKeywords.length === 0 ? (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             <p>No keywords added yet</p>
             <p className="text-sm mt-2">Add keywords to filter streams</p>
           </div>
         ) : (
-          keywords.map((keyword) => (
+          sortedKeywords.map((keyword) => (
             <div
               key={keyword}
               className="flex items-start gap-2 p-2 bg-gray-50 dark:bg-[#333333] rounded-lg border border-gray-200 dark:border-[#444444] hover:shadow-md transition-shadow"
