@@ -11,9 +11,12 @@ function KeywordList({ keywords, onAddKeyword, onDeleteKeyword }) {
 
   return (
     <div className="card">
-      <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">
+      <h2 className="text-xl font-semibold mb-2 text-gray-900 dark:text-gray-100">
         Keywords
       </h2>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+        Videos matching any of these keywords will be downloaded
+      </p>
 
       {/* Keyword List */}
       <div className="space-y-1.5 mb-4 max-h-[800px] overflow-y-auto">
