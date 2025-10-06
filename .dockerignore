@@ -1,0 +1,57 @@
+# Node modules (will be installed in container)
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Build output (will be built in container)
+dist
+.vite
+
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Development files
+.env
+.env.local
+.env.*.local
+.vscode
+.idea
+
+# Docker files
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Documentation
+README.md
+LICENSE.md
+*.md
+doc
+
+# Data and downloads (should be mounted as volumes)
+data
+download
+
+# Test files
+tests
+*.test.js
+*.spec.js
+coverage
+
+# CI/CD
+.github
+.gitlab-ci.yml
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Temporary files
+tmp
+temp
+*.log

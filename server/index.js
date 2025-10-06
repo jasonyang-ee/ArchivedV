@@ -426,10 +426,15 @@ async function checkUpdates() {
         const linkObj = entry.link.find((l) => l.$ && l.$.href);
         const videoLink = linkObj ? linkObj.$.href : ch.link;
         
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, "0");
-        const day = String(now.getDate()).padStart(2, "0");
+        // Extract upload date from RSS feed (published field)
+        let uploadDate = new Date();
+        if (entry.published && entry.published[0]) {
+          uploadDate = new Date(entry.published[0]);
+        }
+        
+        const year = uploadDate.getFullYear();
+        const month = String(uploadDate.getMonth() + 1).padStart(2, "0");
+        const day = String(uploadDate.getDate()).padStart(2, "0");
         const datePrefix = `[${year}-${month}-${day}] `;
         const folderName = `${datePrefix}${sanitize(title)}`;
         const dir = path.join(channelDir, folderName);
@@ -460,7 +465,7 @@ async function checkUpdates() {
                   alreadyDownloaded = true;
                   break;
                 } else {
-                  fs.rmdirSync(folderPath, { recursive: true });
+                  fs.rmSync(folderPath, { recursive: true, force: true });
                 }
               }
             }
@@ -503,6 +508,7 @@ async function checkUpdates() {
             "10",
             "-o",
             path.join(dir, "%(title)s.%(ext)s"),
+            "--write-thumbnail",
             "--embed-thumbnail",
             "--add-metadata",
             "--merge-output-format",
@@ -552,12 +558,21 @@ async function checkUpdates() {
               console.warn(`[Archived V] Live event for "${title}" hasn't started yet, skipping.`);
               clearDownload();
               try {
-                fs.rmdirSync(dir, { recursive: true });
-              } catch (e) {}
+                fs.rmSync(dir, { recursive: true, force: true });
+              } catch (e) {
+                console.error(`[Archived V] Failed to cleanup directory: ${e.message}`);
+              }
               return resolve({ success: false, skipped: true });
             }
             
+            // Download failed for other reasons
+            console.error(`[Archived V] Download failed for "${title}" with code ${code}`);
             clearDownload();
+            try {
+              fs.rmSync(dir, { recursive: true, force: true });
+            } catch (e) {
+              console.error(`[Archived V] Failed to cleanup directory: ${e.message}`);
+            }
             return reject(new Error("download failed"));
           })
         );
