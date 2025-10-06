@@ -3,12 +3,14 @@ import { api } from "./api";
 import Header from "./components/Header";
 import ChannelList from "./components/ChannelList";
 import KeywordList from "./components/KeywordList";
+import IgnoreKeywordList from "./components/IgnoreKeywordList";
 import StatusDisplay from "./components/StatusDisplay";
 import DownloadHistory from "./components/DownloadHistory";
 
 function App() {
   const [channels, setChannels] = useState([]);
   const [keywords, setKeywords] = useState([]);
+  const [ignoreKeywords, setIgnoreKeywords] = useState([]);
   const [status, setStatus] = useState({
     lastRun: null,
     downloadedCount: 0,
@@ -53,6 +55,7 @@ function App() {
       const config = await api.getConfig();
       setChannels(config.channels || []);
       setKeywords(config.keywords || []);
+      setIgnoreKeywords(config.ignoreKeywords || []);
       await loadStatus();
     } catch (err) {
       console.error("Failed to load config:", err);
@@ -115,6 +118,24 @@ function App() {
     }
   }
 
+  async function handleAddIgnoreKeyword(keyword) {
+    try {
+      await api.addIgnoreKeyword(keyword);
+      await loadData();
+    } catch (err) {
+      console.error("Failed to add ignore keyword:", err);
+    }
+  }
+
+  async function handleDeleteIgnoreKeyword(keyword) {
+    try {
+      await api.deleteIgnoreKeyword(keyword);
+      await loadData();
+    } catch (err) {
+      console.error("Failed to delete ignore keyword:", err);
+    }
+  }
+
   async function handleRefresh() {
     try {
       const statusData = await api.refresh();
@@ -163,6 +184,11 @@ function App() {
               keywords={keywords}
               onAddKeyword={handleAddKeyword}
               onDeleteKeyword={handleDeleteKeyword}
+            />
+            <IgnoreKeywordList
+              keywords={ignoreKeywords}
+              onAddKeyword={handleAddIgnoreKeyword}
+              onDeleteKeyword={handleDeleteIgnoreKeyword}
             />
           </div>
 
