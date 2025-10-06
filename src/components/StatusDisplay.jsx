@@ -1,7 +1,7 @@
 import React from "react";
 import { formatDate } from "../utils";
 
-function StatusDisplay({ status, onRefresh }) {
+function StatusDisplay({ status, onRefresh, onCancelDownload }) {
   const currentDownloads = status.currentDownloads || [];
   const isDownloading = currentDownloads.length > 0;
 
@@ -93,7 +93,7 @@ function StatusDisplay({ status, onRefresh }) {
               {currentDownloads.map((download) => (
                 <div
                   key={download.id}
-                  className="p-2 bg-white dark:bg-[#2a2a2a] rounded border border-gray-200 dark:border-[#444444] flex items-start justify-between gap-2"
+                  className="p-2 bg-white dark:bg-[#2a2a2a] rounded border border-gray-200 dark:border-[#444444] flex items-start gap-2"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-gray-900 dark:text-gray-100 font-medium break-words">
@@ -103,19 +103,32 @@ function StatusDisplay({ status, onRefresh }) {
                       Channel: {download.channelName || download.username} • Started: {formatDate(download.startTime)}
                     </div>
                   </div>
-                  <svg
-                    className="w-5 h-5 animate-spin text-amber-600 dark:text-amber-500 flex-shrink-0"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                    />
-                  </svg>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <svg
+                      className="w-5 h-5 animate-spin text-amber-600 dark:text-amber-500"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                      />
+                    </svg>
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Cancel download: ${download.title}?`)) {
+                          onCancelDownload(download.id);
+                        }
+                      }}
+                      className="px-3 py-1.5 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30 rounded-lg transition-colors border border-red-200 dark:border-red-800"
+                      title="Cancel download"
+                    >
+                      Abort Download
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

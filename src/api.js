@@ -71,6 +71,14 @@ export const api = {
     return res.json();
   },
 
+  // Downloads
+  async cancelDownload(downloadId) {
+    const res = await fetch(`${API_BASE}/downloads/${encodeURIComponent(downloadId)}`, {
+      method: "DELETE",
+    });
+    return res.json();
+  },
+
   // History
   async getHistory() {
     const res = await fetch(`${API_BASE}/history`);

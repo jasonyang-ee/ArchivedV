@@ -91,6 +91,9 @@ const status = {
   lastCompleted: null,
 };
 
+// Active downloads tracking (for cancellation)
+const activeDownloads = new Map(); // downloadId -> { proc, downloadInfo, dir }
+
 // Pushover setup
 const push = new Pushover({
   token: process.env.PUSHOVER_APP_TOKEN || "",
@@ -273,6 +276,55 @@ app.delete("/api/ignore-keywords/:keyword", (req, res) => {
 // API: Get status
 app.get("/api/status", (req, res) => {
   res.json(status);
+});
+
+// API: Cancel download
+app.delete("/api/downloads/:downloadId", (req, res) => {
+  const { downloadId } = req.params;
+  
+  const download = activeDownloads.get(downloadId);
+  if (!download) {
+    return res.status(404).json({ error: "Download not found or already completed" });
+  }
+  
+  try {
+    // Kill the yt-dlp process
+    download.proc.kill('SIGTERM');
+    
+    // Remove from active downloads
+    activeDownloads.delete(downloadId);
+    
+    // Remove from status and database
+    status.currentDownloads = status.currentDownloads.filter(d => d.id !== downloadId);
+    db.read();
+    db.data.currentDownloads = db.data.currentDownloads.filter(d => d.id !== downloadId);
+    
+    // Add the cancelled video title to ignore keywords to prevent re-downloading
+    if (!db.data.ignoreKeywords) db.data.ignoreKeywords = [];
+    const cancelledTitle = download.downloadInfo.title;
+    if (!db.data.ignoreKeywords.includes(cancelledTitle)) {
+      db.data.ignoreKeywords.push(cancelledTitle);
+      console.log(`[Archived V] Added cancelled video to ignore list: ${cancelledTitle}`);
+    }
+    
+    db.write();
+    
+    // Clean up the download directory
+    try {
+      if (download.dir && fs.existsSync(download.dir)) {
+        fs.rmSync(download.dir, { recursive: true, force: true });
+        console.log(`[Archived V] Cleaned up cancelled download directory: ${download.dir}`);
+      }
+    } catch (cleanupErr) {
+      console.error(`[Archived V] Failed to cleanup directory: ${cleanupErr.message}`);
+    }
+    
+    console.log(`[Archived V] Cancelled download: ${cancelledTitle}`);
+    res.json({ success: true, message: "Download cancelled and added to ignore list" });
+  } catch (err) {
+    console.error(`[Archived V] Error cancelling download: ${err.message}`);
+    res.status(500).json({ error: "Failed to cancel download" });
+  }
 });
 
 // API: Get history
@@ -460,6 +512,9 @@ async function checkUpdates() {
           { stdio: ["pipe", "pipe", "pipe"] }
         );
         
+        // Store process reference for cancellation
+        activeDownloads.set(downloadId, { proc, downloadInfo, dir });
+        
         let stderr = "";
         proc.stdout.on("data", (chunk) => {
           chunk.toString().split(/\r?\n/).forEach((line) => {
@@ -478,6 +533,9 @@ async function checkUpdates() {
         const downloadResult = await new Promise((resolve, reject) =>
           proc.on("close", (code) => {
             const clearDownload = async () => {
+              // Remove from active downloads map
+              activeDownloads.delete(downloadId);
+              
               // Remove from current downloads
               status.currentDownloads = status.currentDownloads.filter(d => d.id !== downloadId);
               db.read();
