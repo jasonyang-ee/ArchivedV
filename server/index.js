@@ -565,7 +565,14 @@ async function checkUpdates() {
               return resolve({ success: false, skipped: true });
             }
             
+            // Download failed for other reasons
+            console.error(`[Archived V] Download failed for "${title}" with code ${code}`);
             clearDownload();
+            try {
+              fs.rmSync(dir, { recursive: true, force: true });
+            } catch (e) {
+              console.error(`[Archived V] Failed to cleanup directory: ${e.message}`);
+            }
             return reject(new Error("download failed"));
           })
         );
