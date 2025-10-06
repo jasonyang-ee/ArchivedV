@@ -78,6 +78,10 @@ const db = {
 // Initialize database
 db.read();
 
+// Clear all current downloads on app start (any previous downloads are no longer valid)
+db.data.currentDownloads = [];
+db.write();
+
 // Status tracking
 const status = {
   lastRun: null,
