@@ -41,6 +41,23 @@ export const api = {
     return res.json();
   },
 
+  // Ignore Keywords
+  async addIgnoreKeyword(keyword) {
+    const res = await fetch(`${API_BASE}/ignore-keywords`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keyword }),
+    });
+    return res.json();
+  },
+
+  async deleteIgnoreKeyword(keyword) {
+    const res = await fetch(`${API_BASE}/ignore-keywords/${encodeURIComponent(keyword)}`, {
+      method: "DELETE",
+    });
+    return res.json();
+  },
+
   // Status
   async getStatus() {
     const res = await fetch(`${API_BASE}/status`);

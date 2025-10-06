@@ -30,16 +30,17 @@ if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR, { recursive: true }
 
 // Database helper
 const db = {
-  data: { channels: [], keywords: [], history: [], currentDownloads: [] },
+  data: { channels: [], keywords: [], ignoreKeywords: [], history: [], currentDownloads: [] },
   read() {
     if (!fs.existsSync(DB_PATH)) {
-      this.data = { channels: [], keywords: [], history: [], currentDownloads: [] };
+      this.data = { channels: [], keywords: [], ignoreKeywords: [], history: [], currentDownloads: [] };
       fs.writeFileSync(DB_PATH, JSON.stringify(this.data, null, 2));
     } else {
       try {
         const file = fs.readFileSync(DB_PATH, "utf-8");
         this.data = JSON.parse(file);
         if (!this.data.history) this.data.history = [];
+        if (!this.data.ignoreKeywords) this.data.ignoreKeywords = [];
         
         // Migrate old format to new format
         if (this.data.currentDownload && !this.data.currentDownloads) {
@@ -65,7 +66,7 @@ const db = {
           this.write(); // Save the cleanup
         }
       } catch {
-        this.data = { channels: [], keywords: [], history: [], currentDownloads: [] };
+        this.data = { channels: [], keywords: [], ignoreKeywords: [], history: [], currentDownloads: [] };
         fs.writeFileSync(DB_PATH, JSON.stringify(this.data, null, 2));
       }
     }
@@ -120,7 +121,11 @@ if (process.env.NODE_ENV === "production") {
 // API: Get config
 app.get("/api/config", (req, res) => {
   db.read();
-  res.json({ channels: db.data.channels, keywords: db.data.keywords });
+  res.json({ 
+    channels: db.data.channels, 
+    keywords: db.data.keywords,
+    ignoreKeywords: db.data.ignoreKeywords || []
+  });
 });
 
 // API: Add channel
@@ -242,6 +247,29 @@ app.delete("/api/keywords/:keyword", (req, res) => {
   res.json({ success: true });
 });
 
+// API: Add ignore keyword
+app.post("/api/ignore-keywords", (req, res) => {
+  const { keyword } = req.body;
+  if (!keyword) return res.status(400).json({ error: "No keyword provided" });
+  db.read();
+  if (!db.data.ignoreKeywords) db.data.ignoreKeywords = [];
+  if (!db.data.ignoreKeywords.includes(keyword)) {
+    db.data.ignoreKeywords.push(keyword);
+    db.write();
+  }
+  res.json({ success: true });
+});
+
+// API: Delete ignore keyword
+app.delete("/api/ignore-keywords/:keyword", (req, res) => {
+  const { keyword } = req.params;
+  db.read();
+  if (!db.data.ignoreKeywords) db.data.ignoreKeywords = [];
+  db.data.ignoreKeywords = db.data.ignoreKeywords.filter((k) => k !== keyword);
+  db.write();
+  res.json({ success: true });
+});
+
 // API: Get status
 app.get("/api/status", (req, res) => {
   res.json(status);
@@ -311,6 +339,7 @@ async function checkUpdates() {
   
   const channels = db.data.channels;
   const keywords = db.data.keywords.map((k) => k.toLowerCase());
+  const ignoreKeywords = (db.data.ignoreKeywords || []).map((k) => k.toLowerCase());
   let count = 0;
 
   for (const ch of channels) {
@@ -356,6 +385,12 @@ async function checkUpdates() {
         // Check keyword match first before adding to downloads
         const match = keywords.some((k) => title.toLowerCase().includes(k));
         if (!match) {
+          continue;
+        }
+        
+        // Check ignore keywords - exclude if any ignore keyword is found
+        const shouldIgnore = ignoreKeywords.some((k) => title.toLowerCase().includes(k));
+        if (shouldIgnore) {
           continue;
         }
         
