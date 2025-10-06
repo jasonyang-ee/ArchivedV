@@ -426,10 +426,15 @@ async function checkUpdates() {
         const linkObj = entry.link.find((l) => l.$ && l.$.href);
         const videoLink = linkObj ? linkObj.$.href : ch.link;
         
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, "0");
-        const day = String(now.getDate()).padStart(2, "0");
+        // Extract upload date from RSS feed (published field)
+        let uploadDate = new Date();
+        if (entry.published && entry.published[0]) {
+          uploadDate = new Date(entry.published[0]);
+        }
+        
+        const year = uploadDate.getFullYear();
+        const month = String(uploadDate.getMonth() + 1).padStart(2, "0");
+        const day = String(uploadDate.getDate()).padStart(2, "0");
         const datePrefix = `[${year}-${month}-${day}] `;
         const folderName = `${datePrefix}${sanitize(title)}`;
         const dir = path.join(channelDir, folderName);
