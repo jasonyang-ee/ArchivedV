@@ -465,7 +465,7 @@ async function checkUpdates() {
                   alreadyDownloaded = true;
                   break;
                 } else {
-                  fs.rmdirSync(folderPath, { recursive: true });
+                  fs.rmSync(folderPath, { recursive: true, force: true });
                 }
               }
             }
@@ -558,8 +558,10 @@ async function checkUpdates() {
               console.warn(`[Archived V] Live event for "${title}" hasn't started yet, skipping.`);
               clearDownload();
               try {
-                fs.rmdirSync(dir, { recursive: true });
-              } catch (e) {}
+                fs.rmSync(dir, { recursive: true, force: true });
+              } catch (e) {
+                console.error(`[Archived V] Failed to cleanup directory: ${e.message}`);
+              }
               return resolve({ success: false, skipped: true });
             }
             
