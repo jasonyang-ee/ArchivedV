@@ -40,6 +40,7 @@ const db = {
         const file = fs.readFileSync(DB_PATH, "utf-8");
         this.data = JSON.parse(file);
         if (!this.data.history) this.data.history = [];
+        
         // Migrate old format to new format
         if (this.data.currentDownload && !this.data.currentDownloads) {
           this.data.currentDownloads = [];
@@ -54,7 +55,15 @@ const db = {
           }
           delete this.data.currentDownload;
         }
+        
+        // Ensure currentDownloads exists
         if (!this.data.currentDownloads) this.data.currentDownloads = [];
+        
+        // Clean up old currentDownload field if currentDownloads exists
+        if (this.data.currentDownloads && this.data.currentDownload) {
+          delete this.data.currentDownload;
+          this.write(); // Save the cleanup
+        }
       } catch {
         this.data = { channels: [], keywords: [], history: [], currentDownloads: [] };
         fs.writeFileSync(DB_PATH, JSON.stringify(this.data, null, 2));
@@ -270,7 +279,11 @@ app.post("/api/refresh", (req, res) => {
 // Download job
 async function checkUpdates() {
   db.read();
+  // Clear all current downloads at start
   status.currentDownloads = [];
+  db.data.currentDownloads = [];
+  db.write();
+  
   const channels = db.data.channels;
   const keywords = db.data.keywords.map((k) => k.toLowerCase());
   let count = 0;
@@ -315,28 +328,9 @@ async function checkUpdates() {
         const folderName = `${datePrefix}${sanitize(title)}`;
         const dir = path.join(channelDir, folderName);
         
-        // Add to current downloads list
-        const downloadId = `${ch.id}-${videoId}-${Date.now()}`;
-        const downloadInfo = {
-          id: downloadId,
-          channel: ch.id,
-          title: title,
-          username: ch.username,
-          channelName: ch.channelName || ch.username,
-          startTime: new Date().toISOString()
-        };
-        status.currentDownloads.push(downloadInfo);
-        db.read();
-        db.data.currentDownloads.push(downloadInfo);
-        db.write();
-        
+        // Check keyword match first before adding to downloads
         const match = keywords.some((k) => title.toLowerCase().includes(k));
         if (!match) {
-          // Remove from current downloads if no match
-          status.currentDownloads = status.currentDownloads.filter(d => d.id !== downloadId);
-          db.read();
-          db.data.currentDownloads = db.data.currentDownloads.filter(d => d.id !== downloadId);
-          db.write();
           continue;
         }
         
@@ -367,8 +361,19 @@ async function checkUpdates() {
         
         fs.mkdirSync(dir, { recursive: true });
         
+        // Add to current downloads list AFTER all checks pass
+        const downloadId = `${ch.id}-${videoId}-${Date.now()}`;
+        const downloadInfo = {
+          id: downloadId,
+          channel: ch.id,
+          title: title,
+          username: ch.username,
+          channelName: ch.channelName || ch.username,
+          startTime: new Date().toISOString()
+        };
+        status.currentDownloads.push(downloadInfo);
         db.read();
-        db.data.currentDownload = { channel: ch.id, title, username: ch.username };
+        db.data.currentDownloads.push(downloadInfo);
         db.write();
         
         const proc = spawn(
