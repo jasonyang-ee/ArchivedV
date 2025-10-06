@@ -145,6 +145,16 @@ function App() {
     }
   }
 
+  async function handleCancelDownload(downloadId) {
+    try {
+      await api.cancelDownload(downloadId);
+      await loadStatus();
+    } catch (err) {
+      console.error("Failed to cancel download:", err);
+      alert("Failed to cancel download: " + (err.message || "Unknown error"));
+    }
+  }
+
   async function handleClearHistory() {
     if (!window.confirm("Are you sure you want to clear the download history?")) {
       return;
@@ -194,7 +204,11 @@ function App() {
 
           {/* Center - Download Status and History */}
           <div className="space-y-6 min-w-0">
-            <StatusDisplay status={status} onRefresh={handleRefresh} />
+            <StatusDisplay 
+              status={status} 
+              onRefresh={handleRefresh}
+              onCancelDownload={handleCancelDownload}
+            />
             <DownloadHistory history={history} onClearHistory={handleClearHistory} />
           </div>
 
