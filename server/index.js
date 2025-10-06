@@ -279,10 +279,31 @@ app.post("/api/refresh", (req, res) => {
 // Download job
 async function checkUpdates() {
   db.read();
-  // Clear all current downloads at start
-  status.currentDownloads = [];
-  db.data.currentDownloads = [];
-  db.write();
+  
+  // Remove duplicates from currentDownloads based on unique video ID
+  // Keep only the first occurrence of each channel-video combination
+  const seenVideos = new Set();
+  const uniqueDownloads = [];
+  
+  for (const download of db.data.currentDownloads) {
+    // Extract video identifier from the download (channel + video portion of ID)
+    const idParts = download.id.split('-');
+    const videoKey = `${download.channel}-${idParts[1]}`; // channel-videoId
+    
+    if (!seenVideos.has(videoKey)) {
+      seenVideos.add(videoKey);
+      uniqueDownloads.push(download);
+    }
+  }
+  
+  // Update with deduplicated list if there were duplicates
+  if (uniqueDownloads.length !== db.data.currentDownloads.length) {
+    db.data.currentDownloads = uniqueDownloads;
+    status.currentDownloads = uniqueDownloads;
+    db.write();
+  } else {
+    status.currentDownloads = db.data.currentDownloads;
+  }
   
   const channels = db.data.channels;
   const keywords = db.data.keywords.map((k) => k.toLowerCase());
