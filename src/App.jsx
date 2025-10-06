@@ -149,6 +149,8 @@ function App() {
     try {
       await api.cancelDownload(downloadId);
       await loadStatus();
+      // Reload config to refresh ignore keywords list in UI
+      await loadData();
     } catch (err) {
       console.error("Failed to cancel download:", err);
       alert("Failed to cancel download: " + (err.message || "Unknown error"));
