@@ -309,15 +309,17 @@ app.delete("/api/downloads/:downloadId", (req, res) => {
     
     db.write();
     
-    // Clean up the download directory
-    try {
-      if (download.dir && fs.existsSync(download.dir)) {
-        fs.rmSync(download.dir, { recursive: true, force: true });
-        console.log(`[Archived V] Cleaned up cancelled download directory: ${download.dir}`);
+    // Clean up the download directory after a delay to allow process to release file handles
+    setTimeout(() => {
+      try {
+        if (download.dir && fs.existsSync(download.dir)) {
+          fs.rmSync(download.dir, { recursive: true, force: true });
+          console.log(`[Archived V] Cleaned up cancelled download directory: ${download.dir}`);
+        }
+      } catch (cleanupErr) {
+        console.error(`[Archived V] Failed to cleanup directory: ${cleanupErr.message}`);
       }
-    } catch (cleanupErr) {
-      console.error(`[Archived V] Failed to cleanup directory: ${cleanupErr.message}`);
-    }
+    }, 10000);
     
     console.log(`[Archived V] Cancelled download: ${cancelledTitle}`);
     res.json({ success: true, message: "Download cancelled and added to ignore list" });
@@ -557,22 +559,28 @@ async function checkUpdates() {
             if (stderr.includes("This live event will begin")) {
               console.warn(`[Archived V] Live event for "${title}" hasn't started yet, skipping.`);
               clearDownload();
-              try {
-                fs.rmSync(dir, { recursive: true, force: true });
-              } catch (e) {
-                console.error(`[Archived V] Failed to cleanup directory: ${e.message}`);
-              }
+              // Delay cleanup to allow process to fully release file handles
+              setTimeout(() => {
+                try {
+                  fs.rmSync(dir, { recursive: true, force: true });
+                } catch (e) {
+                  console.error(`[Archived V] Failed to cleanup directory: ${e.message}`);
+                }
+              }, 10000);
               return resolve({ success: false, skipped: true });
             }
             
             // Download failed for other reasons
             console.error(`[Archived V] Download failed for "${title}" with code ${code}`);
             clearDownload();
-            try {
-              fs.rmSync(dir, { recursive: true, force: true });
-            } catch (e) {
-              console.error(`[Archived V] Failed to cleanup directory: ${e.message}`);
-            }
+            // Delay cleanup to allow process to fully release file handles
+            setTimeout(() => {
+              try {
+                fs.rmSync(dir, { recursive: true, force: true });
+              } catch (e) {
+                console.error(`[Archived V] Failed to cleanup directory: ${e.message}`);
+              }
+            }, 10000);
             return reject(new Error("download failed"));
           })
         );
