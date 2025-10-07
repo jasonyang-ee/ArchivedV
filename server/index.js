@@ -535,6 +535,8 @@ async function checkUpdates() {
             "-o",
             path.join(dir, "%(title)s.%(ext)s"),
             "--write-thumbnail",
+            "--convert-thumbnails",
+            "png",
             "--embed-thumbnail",
             "--add-metadata",
             "--merge-output-format",
