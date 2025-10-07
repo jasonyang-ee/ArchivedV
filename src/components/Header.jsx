@@ -1,6 +1,6 @@
 import React from "react";
 
-function Header({ darkMode, toggleDarkMode }) {
+function Header({ darkMode, toggleDarkMode, dateFormat, onDateFormatChange }) {
   return (
     <header className="bg-white dark:bg-[#2a2a2a] shadow-sm dark:shadow-black/50 border-b border-gray-200 dark:border-[#3a3a3a]">
       <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -14,6 +14,21 @@ function Header({ darkMode, toggleDarkMode }) {
             </p>
           </div>
           <div className="flex items-center space-x-4">
+            {/* Date Format Selector */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Date Format:
+              </label>
+              <select
+                value={dateFormat}
+                onChange={(e) => onDateFormatChange(e.target.value)}
+                className="px-3 py-2 rounded-lg bg-white dark:bg-[#1a1a1a] border border-gray-300 dark:border-[#3a3a3a] text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 dark:focus:ring-amber-600 transition-colors"
+              >
+                <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                <option value="MM-DD-YYYY">MM-DD-YYYY</option>
+              </select>
+            </div>
+            
             {/* Dark Mode Toggle */}
             <button
               onClick={toggleDarkMode}

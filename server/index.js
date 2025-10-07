@@ -30,10 +30,10 @@ if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR, { recursive: true }
 
 // Database helper
 const db = {
-  data: { channels: [], keywords: [], ignoreKeywords: [], history: [], currentDownloads: [] },
+  data: { channels: [], keywords: [], ignoreKeywords: [], history: [], currentDownloads: [], dateFormat: 'YYYY-MM-DD' },
   read() {
     if (!fs.existsSync(DB_PATH)) {
-      this.data = { channels: [], keywords: [], ignoreKeywords: [], history: [], currentDownloads: [] };
+      this.data = { channels: [], keywords: [], ignoreKeywords: [], history: [], currentDownloads: [], dateFormat: 'YYYY-MM-DD' };
       fs.writeFileSync(DB_PATH, JSON.stringify(this.data, null, 2));
     } else {
       try {
@@ -41,6 +41,7 @@ const db = {
         this.data = JSON.parse(file);
         if (!this.data.history) this.data.history = [];
         if (!this.data.ignoreKeywords) this.data.ignoreKeywords = [];
+        if (!this.data.dateFormat) this.data.dateFormat = 'YYYY-MM-DD';
         
         // Migrate old format to new format
         if (this.data.currentDownload && !this.data.currentDownloads) {
@@ -127,7 +128,8 @@ app.get("/api/config", (req, res) => {
   res.json({ 
     channels: db.data.channels, 
     keywords: db.data.keywords,
-    ignoreKeywords: db.data.ignoreKeywords || []
+    ignoreKeywords: db.data.ignoreKeywords || [],
+    dateFormat: db.data.dateFormat || 'YYYY-MM-DD'
   });
 });
 
@@ -271,6 +273,18 @@ app.delete("/api/ignore-keywords/:keyword", (req, res) => {
   db.data.ignoreKeywords = db.data.ignoreKeywords.filter((k) => k !== keyword);
   db.write();
   res.json({ success: true });
+});
+
+// API: Update date format
+app.post("/api/date-format", (req, res) => {
+  const { dateFormat } = req.body;
+  if (!dateFormat || !['YYYY-MM-DD', 'MM-DD-YYYY'].includes(dateFormat)) {
+    return res.status(400).json({ error: "Invalid date format. Must be 'YYYY-MM-DD' or 'MM-DD-YYYY'" });
+  }
+  db.read();
+  db.data.dateFormat = dateFormat;
+  db.write();
+  res.json({ success: true, dateFormat });
 });
 
 // API: Get status
@@ -434,10 +448,19 @@ async function checkUpdates() {
           uploadDate = new Date(entry.published[0]);
         }
         
+        // Format date based on user setting
         const year = uploadDate.getFullYear();
         const month = String(uploadDate.getMonth() + 1).padStart(2, "0");
         const day = String(uploadDate.getDate()).padStart(2, "0");
-        const datePrefix = `[${year}-${month}-${day}] `;
+        
+        const dateFormat = db.data.dateFormat || 'YYYY-MM-DD';
+        let datePrefix;
+        if (dateFormat === 'MM-DD-YYYY') {
+          datePrefix = `[${month}-${day}-${year}] `;
+        } else {
+          datePrefix = `[${year}-${month}-${day}] `;
+        }
+        
         const folderName = `${datePrefix}${sanitize(title)}`;
         const dir = path.join(channelDir, folderName);
         
@@ -459,7 +482,8 @@ async function checkUpdates() {
           const channelFolders = fs.readdirSync(channelDir, { withFileTypes: true });
           for (const folder of channelFolders) {
             if (folder.isDirectory()) {
-              const folderTitle = folder.name.replace(/^\[\d{4}-\d{2}-\d{2}(?:-\d{2})?\]\s*/, "");
+              // Match both YYYY-MM-DD and MM-DD-YYYY formats
+              const folderTitle = folder.name.replace(/^\[\d{2,4}-\d{2}-\d{2,4}\]\s*/, "");
               if (folderTitle === sanitizedTitle) {
                 const folderPath = path.join(channelDir, folder.name);
                 const files = fs.readdirSync(folderPath);

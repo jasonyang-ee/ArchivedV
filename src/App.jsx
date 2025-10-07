@@ -11,6 +11,7 @@ function App() {
   const [channels, setChannels] = useState([]);
   const [keywords, setKeywords] = useState([]);
   const [ignoreKeywords, setIgnoreKeywords] = useState([]);
+  const [dateFormat, setDateFormat] = useState('YYYY-MM-DD');
   const [status, setStatus] = useState({
     lastRun: null,
     downloadedCount: 0,
@@ -56,6 +57,7 @@ function App() {
       setChannels(config.channels || []);
       setKeywords(config.keywords || []);
       setIgnoreKeywords(config.ignoreKeywords || []);
+      setDateFormat(config.dateFormat || 'YYYY-MM-DD');
       await loadStatus();
     } catch (err) {
       console.error("Failed to load config:", err);
@@ -145,6 +147,15 @@ function App() {
     }
   }
 
+  async function handleDateFormatChange(newFormat) {
+    try {
+      await api.updateDateFormat(newFormat);
+      setDateFormat(newFormat);
+    } catch (err) {
+      console.error("Failed to update date format:", err);
+    }
+  }
+
   async function handleCancelDownload(downloadId) {
     try {
       await api.cancelDownload(downloadId);
@@ -183,7 +194,12 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-[#1f1f1f]">
       {/* Wide Header */}
-      <Header darkMode={darkMode} toggleDarkMode={() => setDarkMode(!darkMode)} />
+      <Header 
+        darkMode={darkMode} 
+        toggleDarkMode={() => setDarkMode(!darkMode)}
+        dateFormat={dateFormat}
+        onDateFormatChange={handleDateFormatChange}
+      />
 
       {/* Main Content with New Layout */}
       <main className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">

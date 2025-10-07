@@ -58,6 +58,16 @@ export const api = {
     return res.json();
   },
 
+  // Date Format
+  async updateDateFormat(dateFormat) {
+    const res = await fetch(`${API_BASE}/date-format`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dateFormat }),
+    });
+    return res.json();
+  },
+
   // Status
   async getStatus() {
     const res = await fetch(`${API_BASE}/status`);
