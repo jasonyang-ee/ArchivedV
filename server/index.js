@@ -11,7 +11,7 @@ import { spawn } from "child_process";
 import Pushover from "pushover-notifications";
 import dotenv from "dotenv";
 
-dotenv.config();
+dotenv.config({quiet: true});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
