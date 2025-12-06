@@ -1,3 +1,23 @@
+# Data files
 data
-node_modules
 download
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Production
+dist/
+build/
+
+# Environment
+.env
+.env.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
