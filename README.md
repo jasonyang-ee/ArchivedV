@@ -46,7 +46,6 @@ ghcr.io/jasonyang-ee/archivedv:latest
 ## Supported Platforms
 - Linux AMD64
 - Linux ARM64
-- Linux ARMv7
 
 ## Run Using Docker Compose
 
