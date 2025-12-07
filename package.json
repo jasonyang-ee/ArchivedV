@@ -1,6 +1,6 @@
 {
-  "name": "unarchived-youtube",
-  "version": "2.0.0",
+  "name": "archived",
+  "version": "1.1.2",
   "type": "module",
   "private": true,
   "scripts": {
