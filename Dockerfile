@@ -20,18 +20,25 @@ RUN npm run build
 FROM node:24-alpine AS runtime
 
 # Install system dependencies
-RUN apk add --no-cache python3 py3-pip ffmpeg ca-certificates openssl curl && \
+RUN apk add --no-cache \
+    python3 \
+    py3-pip \
+    ffmpeg \
+    ca-certificates \
+    openssl \
+    curl \
+    unzip && \
     rm -rf /var/cache/apk/* && \
     update-ca-certificates
 
-# Install yt-dlp with default extras
-RUN pip3 install --no-cache-dir "yt-dlp[default]" --break-system-packages && \
-    rm -rf /root/.cache
-
-# Install Deno
-RUN curl -fsSL https://deno.land/x/install/install.sh | sh
+# Install Deno (minimum version 2.0.0)
+RUN curl -fsSL https://deno.land/install.sh | sh
 ENV DENO_INSTALL="/root/.deno"
 ENV PATH="$DENO_INSTALL/bin:$PATH"
+
+# Install yt-dlp with [default] extras (includes yt-dlp-ejs package)
+RUN pip3 install --no-cache-dir "yt-dlp[default]" --break-system-packages && \
+    rm -rf /root/.cache
 
 # Set working directory
 WORKDIR /app
