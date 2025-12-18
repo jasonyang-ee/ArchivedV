@@ -28,8 +28,8 @@
     "express": "^5.2.1",
     "node-cron": "^4.2.1",
     "pushover-notifications": "^1.2.3",
-    "react": "^19.2.1",
-    "react-dom": "^19.2.1",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
