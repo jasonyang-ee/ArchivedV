@@ -31,14 +31,23 @@ RUN apk add --no-cache \
     rm -rf /var/cache/apk/* && \
     update-ca-certificates
 
-# Install Deno (minimum version 2.0.0)
+# Install Deno (minimum version 2.0.0 required)
 RUN curl -fsSL https://deno.land/install.sh | sh
 ENV DENO_INSTALL="/root/.deno"
 ENV PATH="$DENO_INSTALL/bin:$PATH"
 
-# Install yt-dlp with [default] extras (includes yt-dlp-ejs package)
+# Install yt-dlp with [default] extras (includes yt-dlp-ejs)
 RUN pip3 install --no-cache-dir "yt-dlp[default]" --break-system-packages && \
     rm -rf /root/.cache
+
+# Create yt-dlp config directory and enable remote components as fallback
+RUN mkdir -p /root/.config/yt-dlp && \
+    echo "--remote-components ejs:npm" > /root/.config/yt-dlp/config
+
+# Verify installations
+RUN deno --version && \
+    yt-dlp --version && \
+    python3 -c "import yt_dlp_ejs; print(f'yt-dlp-ejs version: {yt_dlp_ejs.__version__}')"
 
 # Set working directory
 WORKDIR /app
