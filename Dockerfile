@@ -34,11 +34,6 @@ RUN apk add --no-cache \
 RUN pip3 install --no-cache-dir "yt-dlp[default]" --break-system-packages && \
     rm -rf /root/.cache
 
-# Create yt-dlp config to use Node.js as JavaScript runtime
-RUN mkdir -p /root/.config/yt-dlp && \
-    echo "--js-runtimes node" > /root/.config/yt-dlp/config && \
-    echo "--remote-components ejs:npm" >> /root/.config/yt-dlp/config
-
 # Verify installations
 RUN node --version && \
     npm --version && \
