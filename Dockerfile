@@ -56,6 +56,7 @@ RUN npm ci --only=production --ignore-scripts && \
 RUN mkdir -p /app/data /app/download
 
 # Expose port
+ENV NODE_ENV=production
 EXPOSE 3000
 
 # Health check
