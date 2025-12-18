@@ -1,8 +1,17 @@
 {
-  "name": "archived",
+  "name": "archivedv",
   "version": "1.1.2",
   "type": "module",
   "private": true,
+  "author": "Jason Yang",
+  "license": "MIT",
+  "keywords": [
+    "archivedv",
+    "vtuber",
+    "youtube",
+    "yt-dlp",
+    "download"
+  ],
   "scripts": {
     "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
     "server:dev": "node --watch server/index.js",

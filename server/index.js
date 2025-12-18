@@ -113,6 +113,42 @@ function sanitize(str) {
   return str.replace(/[\/\\:*?"<>|]/g, "").trim();
 }
 
+// Safe directory cleanup - only removes truly empty directories, never deletes video files
+function safeCleanupDirectory(dir, reason = "") {
+  try {
+    if (!fs.existsSync(dir)) {
+      return { cleaned: false, reason: "Directory does not exist" };
+    }
+    
+    const files = fs.readdirSync(dir);
+    
+    // Check for any video or media files that should never be deleted
+    const protectedFiles = files.filter(f => 
+      /\.(mp4|mkv|webm|avi|mov|flv|wmv|part|ytdl|f\d+\.mp4)$/i.test(f)
+    );
+    
+    if (protectedFiles.length > 0) {
+      console.log(`[Archived V] NOT deleting "${dir}" - contains ${protectedFiles.length} video/media file(s): ${protectedFiles.slice(0, 3).join(", ")}${protectedFiles.length > 3 ? '...' : ''}`);
+      return { cleaned: false, reason: "Contains protected video files", files: protectedFiles };
+    }
+    
+    // Only delete if truly empty (no files at all)
+    if (files.length === 0) {
+      fs.rmSync(dir, { recursive: true, force: true });
+      console.log(`[Archived V] Cleaned up empty directory: ${dir}${reason ? ` (${reason})` : ''}`);
+      return { cleaned: true, reason: "Empty directory removed" };
+    }
+    
+    // Has non-video files (thumbnails, metadata, etc.) - don't delete
+    console.log(`[Archived V] NOT deleting "${dir}" - contains ${files.length} file(s): ${files.slice(0, 3).join(", ")}${files.length > 3 ? '...' : ''}`);
+    return { cleaned: false, reason: "Contains other files", files };
+    
+  } catch (e) {
+    console.error(`[Archived V] Error during cleanup of "${dir}": ${e.message}`);
+    return { cleaned: false, reason: e.message };
+  }
+}
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -324,14 +360,10 @@ app.delete("/api/downloads/:downloadId", (req, res) => {
     db.write();
     
     // Clean up the download directory after a delay to allow process to release file handles
+    // ONLY removes empty directories - never deletes video files
     setTimeout(() => {
-      try {
-        if (download.dir && fs.existsSync(download.dir)) {
-          fs.rmSync(download.dir, { recursive: true, force: true });
-          console.log(`[Archived V] Cleaned up cancelled download directory: ${download.dir}`);
-        }
-      } catch (cleanupErr) {
-        console.error(`[Archived V] Failed to cleanup directory: ${cleanupErr.message}`);
+      if (download.dir) {
+        safeCleanupDirectory(download.dir, "cancelled download");
       }
     }, 10000);
     
@@ -478,6 +510,21 @@ async function checkUpdates() {
         
         const sanitizedTitle = sanitize(title);
         let alreadyDownloaded = false;
+        let isCurrentlyDownloading = false;
+        
+        // CHECK 1: Is this video currently being downloaded by an active process?
+        for (const [downloadId, download] of activeDownloads.entries()) {
+          if (download.downloadInfo.channel === ch.id && 
+              download.downloadInfo.title === title) {
+            isCurrentlyDownloading = true;
+            console.log(`[Archived V] Skipping "${title}" - already downloading (ID: ${downloadId})`);
+            break;
+          }
+        }
+        
+        if (isCurrentlyDownloading) continue;
+        
+        // CHECK 2: Does the folder exist with video files (completed or partial)?
         try {
           const channelFolders = fs.readdirSync(channelDir, { withFileTypes: true });
           for (const folder of channelFolders) {
@@ -487,10 +534,23 @@ async function checkUpdates() {
               if (folderTitle === sanitizedTitle) {
                 const folderPath = path.join(channelDir, folder.name);
                 const files = fs.readdirSync(folderPath);
-                if (files.length > 0) {
+                
+                // Check if any video files (.mp4, .mkv, .webm, .part) exist
+                const hasVideoFiles = files.some(f => 
+                  /\.(mp4|mkv|webm|part|ytdl|f\d+)$/i.test(f)
+                );
+                
+                if (hasVideoFiles) {
+                  // Video files exist - consider it downloaded or in progress
+                  alreadyDownloaded = true;
+                  break;
+                } else if (files.length > 0) {
+                  // Has files but no video files (e.g., only thumbnails) - still consider downloaded
                   alreadyDownloaded = true;
                   break;
                 } else {
+                  // Only delete truly empty folders (no files at all)
+                  console.log(`[Archived V] Removing empty folder: ${folderPath}`);
                   fs.rmSync(folderPath, { recursive: true, force: true });
                 }
               }
@@ -529,9 +589,12 @@ async function checkUpdates() {
             "--socket-timeout",
             "30",
             "--retries",
-            "10",
+            "20",
             "--fragment-retries",
-            "10",
+            "infinite",
+            "--skip-unavailable-fragments",
+            "--no-abort-on-error",
+            "-k",
             "-o",
             path.join(dir, "%(title)s.%(ext)s"),
             "--write-thumbnail",
@@ -586,30 +649,66 @@ async function checkUpdates() {
               console.warn(`[Archived V] Live event for "${title}" hasn't started yet, skipping.`);
               clearDownload();
               // Delay cleanup to allow process to fully release file handles
+              // ONLY removes empty directories - never deletes video files
               setTimeout(() => {
-                try {
-                  fs.rmSync(dir, { recursive: true, force: true });
-                } catch (e) {
-                  console.error(`[Archived V] Failed to cleanup directory: ${e.message}`);
-                }
+                safeCleanupDirectory(dir, "live event not started");
               }, 10000);
               return resolve({ success: false, skipped: true });
             }
             
             // Download failed for other reasons
             console.error(`[Archived V] Download failed for "${title}" with code ${code}`);
-            clearDownload();
-            // Delay cleanup to allow process to fully release file handles
-            setTimeout(() => {
-              try {
-                fs.rmSync(dir, { recursive: true, force: true });
-              } catch (e) {
-                console.error(`[Archived V] Failed to cleanup directory: ${e.message}`);
+            
+            // Check if we got any usable video despite the error
+            // (e.g., fragment errors during live stream but merge completed)
+            let hasPartialDownload = false;
+            try {
+              if (fs.existsSync(dir)) {
+                const files = fs.readdirSync(dir);
+                const videoFiles = files.filter(f => /\.(mp4|mkv|webm)$/i.test(f) && !f.includes('.f'));
+                const partFiles = files.filter(f => /\.(part|ytdl|f\d+\.mp4)$/i.test(f));
+                
+                if (videoFiles.length > 0) {
+                  // We have a merged video file - this might be usable!
+                  const videoSizes = videoFiles.map(f => {
+                    try {
+                      return { name: f, size: fs.statSync(path.join(dir, f)).size };
+                    } catch { return { name: f, size: 0 }; }
+                  });
+                  
+                  const hasSubstantialVideo = videoSizes.some(v => v.size > 1024 * 1024); // > 1MB
+                  if (hasSubstantialVideo) {
+                    console.log(`[Archived V] Download failed but found usable video file(s): ${videoFiles.join(", ")}`);
+                    console.log(`[Archived V] Keeping directory for manual review: ${dir}`);
+                    hasPartialDownload = true;
+                  }
+                } else if (partFiles.length > 0) {
+                  console.log(`[Archived V] Download failed with partial files: ${partFiles.slice(0, 3).join(", ")}${partFiles.length > 3 ? '...' : ''}`);
+                  console.log(`[Archived V] Keeping directory for potential resume: ${dir}`);
+                  hasPartialDownload = true;
+                }
               }
-            }, 10000);
+            } catch (checkErr) {
+              console.error(`[Archived V] Error checking for partial download: ${checkErr.message}`);
+            }
+            
+            clearDownload();
+            
+            // Only attempt cleanup if no partial download detected
+            // Safe cleanup will still protect any video files
+            if (!hasPartialDownload) {
+              setTimeout(() => {
+                safeCleanupDirectory(dir, "download failed");
+              }, 10000);
+            }
+            
             return reject(new Error("download failed"));
           })
-        );
+        ).catch(err => {
+          // Catch download errors to prevent them from stopping other downloads
+          console.warn(`[Archived V] Download error handled: ${err.message}`);
+          return { success: false, error: err.message };
+        });
         
         if (downloadResult.success) {
           status.lastCompleted = title;
