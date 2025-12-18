@@ -2,16 +2,16 @@ FROM node:24-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files first (better layer caching)
+# Copy package files
 COPY package*.json ./
 
-# Install ALL dependencies (needed for build)
+# Install dependencies
 RUN npm ci --ignore-scripts
 
-# Copy source files
+# Copy source code
 COPY . .
 
-# Build frontend with Vite
+# Build frontend
 RUN npm run build
 
 
@@ -19,37 +19,29 @@ RUN npm run build
 
 FROM node:24-alpine AS runtime
 
-# Install system dependencies
+# Install system dependencies (Node.js already included!)
 RUN apk add --no-cache \
     python3 \
     py3-pip \
     ffmpeg \
     ca-certificates \
     openssl \
-    curl \
-    nodejs \
-    npm && \
+    curl && \
     rm -rf /var/cache/apk/* && \
     update-ca-certificates
-
-# Install Deno (set PATH in same RUN command)
-RUN curl -fsSL https://deno.land/install.sh | sh && \
-    /root/.deno/bin/deno --version
-
-# Set Deno environment variables for subsequent layers
-ENV DENO_INSTALL="/root/.deno"
-ENV PATH="$DENO_INSTALL/bin:$PATH"
 
 # Install yt-dlp with [default] extras (includes yt-dlp-ejs)
 RUN pip3 install --no-cache-dir "yt-dlp[default]" --break-system-packages && \
     rm -rf /root/.cache
 
-# Create yt-dlp config directory and enable remote components as fallback
+# Create yt-dlp config to use Node.js as JavaScript runtime
 RUN mkdir -p /root/.config/yt-dlp && \
-    echo "--remote-components ejs:npm" > /root/.config/yt-dlp/config
+    echo "--js-runtimes node" > /root/.config/yt-dlp/config && \
+    echo "--remote-components ejs:npm" >> /root/.config/yt-dlp/config
 
-# Verify installations (PATH is now set via ENV)
-RUN deno --version && \
+# Verify installations
+RUN node --version && \
+    npm --version && \
     yt-dlp --version && \
     python3 -c "import yt_dlp_ejs; print(f'yt-dlp-ejs version: {yt_dlp_ejs.__version__}')"
 
@@ -70,6 +62,10 @@ RUN mkdir -p /app/data /app/download
 
 # Expose port
 EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"
 
 # Start the application
 CMD ["node", "server/index.js"]
