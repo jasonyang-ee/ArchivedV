@@ -43,7 +43,7 @@ RUN mkdir -p /root/.config/yt-dlp && \
 RUN node --version && \
     npm --version && \
     yt-dlp --version && \
-    python3 -c "import yt_dlp_ejs; print(f'yt-dlp-ejs version: {yt_dlp_ejs.__version__}')"
+    python3 -c "import yt_dlp_ejs; print('yt-dlp-ejs installed successfully')"
 
 # Set working directory
 WORKDIR /app
