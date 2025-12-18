@@ -51,7 +51,7 @@ ghcr.io/jasonyang-ee/archivedv:latest
 
 ```yaml
 services:
-  vtuber:
+  archivedv:
     image: jasonyangee/archivedv:latest
     container_name: archivedv
     restart: unless-stopped
@@ -59,8 +59,8 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./vtuber/data:/app/data
-      - ./vtuber/video:/app/download
+      - ./archivedv/data:/app/data
+      - ./archivedv/video:/app/download
     environment:
       TZ: America/Los_Angeles
       # PUSHOVER_APP_TOKEN: ${PUSHOVER_APP_TOKEN}
@@ -94,9 +94,32 @@ Change to the user ID of your host system if necessary. You can do this by modif
 
 ## Potential Issues
 
-Folder permissions may cause issues. Please manually `chown` the volume bind folders to the user ID specified in the Docker Compose file.
+- Folder permissions may cause issues. Please manually `chown` the volume bind folders to the user ID specified in the Docker Compose file.
 
-> Example Command
-```bash
-sudo chown -R 1000:1000 ./vtuber
-```
+	> Example Command
+	```bash
+	sudo chown -R 1000:1000 ./archivedv
+	```
+
+- Axios need ipv4 to work properly. Force ipv4 dns resolution by adding the following to your docker compose file:
+	```yaml
+	services:
+	  archivedv:
+	    image: jasonyangee/archivedv:latest
+	    container_name: archivedv
+	    restart: unless-stopped
+	    user: "1000:1000"
+	    ports:
+	    - "3000:3000"
+	    volumes:
+	    - ./archivedv/data:/app/data
+	    - ./archivedv/video:/app/download
+	    environment:
+	    TZ: America/Los_Angeles
+	    NODE_OPTIONS: "--dns-result-order=ipv4first"
+	    dns:
+	    - 8.8.8.8
+	    - 1.1.1.1
+	    sysctls:
+	    - net.ipv6.conf.all.disable_ipv6=1
+	```
