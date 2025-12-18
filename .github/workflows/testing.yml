@@ -3,7 +3,8 @@ name: 'Testing'
 on:
   push:
     branches:
-      - 'test*'
+      - '*''
+  workflow_dispatch:
 
 jobs:
   Build_Upload:
@@ -23,7 +24,7 @@ jobs:
         images: |
           ${{ secrets.USERNAME_DOCKERHUB }}/archivedv
           ghcr.io/${{ github.actor }}/archivedv
-        tags: type=ref,event=branch
+        tags: type=raw,value=test
         flavor: onlatest=false
 
     - name: Login to Docker Hub
