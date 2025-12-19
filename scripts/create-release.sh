@@ -217,7 +217,7 @@ echo -e "${GREEN}New version: ${BOLD}$NEW_VERSION${NC}"
 # -----------------------------------------------------------------------------
 
 if [ "$SKIP_CONFIRM" != true ]; then
-	read -p "${YELLOW}Do you want to proceed? (y/n) ${NC}" CONFIRM
+	read -p "Do you want to proceed? (y/n) " CONFIRM
     if [[ "$CONFIRM" != "y" ]]; then
         echo -e "${RED}Release process canceled.${NC}"
         exit 1
