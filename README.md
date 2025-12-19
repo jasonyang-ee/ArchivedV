@@ -67,68 +67,6 @@ services:
       # PUSHOVER_USER_TOKEN: ${PUSHOVER_USER_TOKEN}
 ```
 
-## 🏗️ Development & Deployment
-
-### Versioning Strategy
-
-This project uses **Semantic Versioning** managed through `package.json`. Releases are triggered by git tags (like [pocket-id](https://github.com/pocket-id/pocket-id)).
-
-- **MAJOR.MINOR.PATCH** format (e.g., `1.2.3`)
-- Releases triggered by `v*.*.*` tags
-- Docker images built for AMD64/ARM64
-- GitHub releases auto-published
-
-### CI/CD Pipeline
-
-#### 🧪 Test Workflow (`test.yml`)
-- **Trigger**: Push to main, PRs, manual
-- **Purpose**: Build and validate Docker images
-- **Jobs**: Build image, health check, API tests
-
-#### 🚀 Release Workflow (`release.yml`)
-- **Trigger**: Tags matching `v*.*.*`
-- **Purpose**: Production release
-- **Jobs**: Multi-platform build, push to registries, create GitHub release
-
-#### ✅ PR Validation (`pr-validation.yml`)
-- **Trigger**: Pull requests to main
-- **Purpose**: Validate code before merge
-- **Jobs**: Lint, build, quick tests
-
-### Creating a Release
-
-The recommended way to create releases is using the `create-release.sh` script:
-
-```bash
-# Auto-detect release type based on commits
-./scripts/create-release.sh
-
-# Force a specific release type
-./scripts/create-release.sh --patch   # Bug fixes (1.2.3 → 1.2.4)
-./scripts/create-release.sh --minor   # New features (1.2.3 → 1.3.0)
-./scripts/create-release.sh --major   # Breaking changes (1.2.3 → 2.0.0)
-
-# Skip confirmation prompts
-./scripts/create-release.sh --minor -y
-```
-
-The script will:
-1. Auto-detect release type from commit history (`feat:` → minor, `fix:` → patch)
-2. Update `package.json` version
-3. Add new section to `CHANGELOG.md`
-4. Commit, tag, and push
-5. Create a GitHub draft release
-
-### Required GitHub Secrets
-
-| Secret | Description |
-|--------|-------------|
-| `USERNAME_DOCKERHUB` | Docker Hub username |
-| `TOKEN_DOCKERHUB` | Docker Hub access token |
-| `GITHUB_TOKEN` | Auto-provided by GitHub Actions |
-
-For detailed versioning documentation, see [VERSIONING.md](VERSIONING.md).
-
 ## Web Interface
 
 Access the web interface at `http://<host_ip>:3000`
@@ -185,3 +123,8 @@ Change to the user ID of your host system if necessary. You can do this by modif
 	    sysctls:
 	    - net.ipv6.conf.all.disable_ipv6=1
 	```
+
+
+## Contribute
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and contribution guidelines.
