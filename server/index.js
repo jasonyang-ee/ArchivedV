@@ -149,6 +149,44 @@ function safeCleanupDirectory(dir, reason = "") {
   }
 }
 
+// Clean up intermediate yt-dlp files after successful download
+function cleanupIntermediateFiles(dir, title) {
+  try {
+    if (!fs.existsSync(dir)) return;
+    
+    const files = fs.readdirSync(dir);
+    
+    // Remove intermediate fragment files (.f123.mp4)
+    const fragmentFiles = files.filter(f => /^\.f\d+\.mp4$/i.test(f));
+    fragmentFiles.forEach(f => {
+      try {
+        fs.unlinkSync(path.join(dir, f));
+        console.log(`[Archived V] Cleaned up intermediate fragment: ${f}`);
+      } catch (e) {
+        console.warn(`[Archived V] Failed to remove intermediate file ${f}: ${e.message}`);
+      }
+    });
+    
+    // Remove original webp thumbnail if png exists
+    const hasPng = files.some(f => f.endsWith('.png'));
+    if (hasPng) {
+      const webpFile = files.find(f => f.endsWith('.webp'));
+      if (webpFile) {
+        try {
+          fs.unlinkSync(path.join(dir, webpFile));
+          console.log(`[Archived V] Cleaned up duplicate thumbnail: ${webpFile}`);
+        } catch (e) {
+          console.warn(`[Archived V] Failed to remove duplicate thumbnail ${webpFile}: ${e.message}`);
+        }
+      }
+    }
+    
+    console.log(`[Archived V] Cleanup completed for "${title}" - removed ${fragmentFiles.length} fragments`);
+  } catch (e) {
+    console.error(`[Archived V] Error during intermediate file cleanup: ${e.message}`);
+  }
+}
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -583,6 +621,8 @@ async function checkUpdates() {
           "yt-dlp",
           [
             "--live-from-start",
+            "--wait-for-video",
+            "30",
             "-ciw",
             "--no-progress",
             "--no-cache-dir",
@@ -594,7 +634,7 @@ async function checkUpdates() {
             "infinite",
             "--skip-unavailable-fragments",
             "--no-abort-on-error",
-            "-k",
+            "--keep-fragments",
             "--js-runtimes",
             "node",
             "--remote-components",
@@ -645,6 +685,8 @@ async function checkUpdates() {
             };
             
             if (code === 0) {
+              // Clean up intermediate files before marking as complete
+              cleanupIntermediateFiles(dir, title);
               clearDownload();
               return resolve({ success: true });
             }
@@ -666,6 +708,7 @@ async function checkUpdates() {
             // Check if we got any usable video despite the error
             // (e.g., fragment errors during live stream but merge completed)
             let hasPartialDownload = false;
+            let isLiveOngoing = false;
             try {
               if (fs.existsSync(dir)) {
                 const files = fs.readdirSync(dir);
@@ -685,6 +728,9 @@ async function checkUpdates() {
                     console.log(`[Archived V] Download failed but found usable video file(s): ${videoFiles.join(", ")}`);
                     console.log(`[Archived V] Keeping directory for manual review: ${dir}`);
                     hasPartialDownload = true;
+                    
+                    // Clean up intermediate files even on partial success
+                    cleanupIntermediateFiles(dir, title);
                   }
                 } else if (partFiles.length > 0) {
                   console.log(`[Archived V] Download failed with partial files: ${partFiles.slice(0, 3).join(", ")}${partFiles.length > 3 ? '...' : ''}`);
@@ -692,6 +738,15 @@ async function checkUpdates() {
                   hasPartialDownload = true;
                 }
               }
+              
+              // Check if this is a live stream that's still ongoing
+              if (stderr.includes("This live event will begin") || 
+                  stderr.includes("fragment not found") ||
+                  stderr.includes("Live stream")) {
+                isLiveOngoing = true;
+                console.log(`[Archived V] Detected ongoing live stream for "${title}" - may retry later`);
+              }
+              
             } catch (checkErr) {
               console.error(`[Archived V] Error checking for partial download: ${checkErr.message}`);
             }
@@ -706,6 +761,23 @@ async function checkUpdates() {
               }, 10000);
             }
             
+            // For live streams that are still ongoing, don't treat as complete failure
+            if (isLiveOngoing && hasPartialDownload) {
+              console.log(`[Archived V] Live stream "${title}" partially downloaded - will not retry automatically`);
+              
+              // Add to ignore list temporarily to prevent repeated attempts
+              db.read();
+              if (!db.data.ignoreKeywords) db.data.ignoreKeywords = [];
+              const ignoreEntry = `${title} (live ongoing)`;
+              if (!db.data.ignoreKeywords.includes(ignoreEntry)) {
+                db.data.ignoreKeywords.push(ignoreEntry);
+                db.write();
+                console.log(`[Archived V] Added "${ignoreEntry}" to ignore list - remove manually when stream ends`);
+              }
+              
+              return resolve({ success: false, liveOngoing: true });
+            }
+            
             return reject(new Error("download failed"));
           })
         ).catch(err => {
@@ -714,17 +786,22 @@ async function checkUpdates() {
           return { success: false, error: err.message };
         });
         
-        if (downloadResult.success) {
-          status.lastCompleted = title;
-          
-          if (process.env.PUSHOVER_APP_TOKEN && process.env.PUSHOVER_USER_TOKEN) {
-            push.send({ message: `Downloaded: ${title}`, title }, () => {});
+        if (downloadResult.success || downloadResult.liveOngoing) {
+          if (downloadResult.success) {
+            status.lastCompleted = title;
+            
+            if (process.env.PUSHOVER_APP_TOKEN && process.env.PUSHOVER_USER_TOKEN) {
+              push.send({ message: `Downloaded: ${title}`, title }, () => {});
+            }
+            
+            db.read();
+            db.data.history.push({ title, time: new Date().toISOString() });
+            db.write();
+            count++;
+          } else if (downloadResult.liveOngoing) {
+            console.log(`[Archived V] Recorded partial download for live stream: ${title}`);
+            // Don't add to history for partial downloads, but don't count as error
           }
-          
-          db.read();
-          db.data.history.push({ title, time: new Date().toISOString() });
-          db.write();
-          count++;
         }
       }
     } catch (e) {
