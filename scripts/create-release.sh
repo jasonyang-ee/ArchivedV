@@ -259,6 +259,7 @@ awk -v version="$NEW_VERSION" -v date="$DATE_TODAY" '
 /^## \[Unreleased\]/ {
     print $0
     print ""
+    print ""
     print "## [" version "] - " date
     print ""
     print "### Added"
