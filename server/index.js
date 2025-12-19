@@ -10,7 +10,6 @@ import cron from "node-cron";
 import { spawn } from "child_process";
 import Pushover from "pushover-notifications";
 import dotenv from "dotenv";
-import rateLimit from "express-rate-limit";
 
 dotenv.config({quiet: true});
 
@@ -19,9 +18,6 @@ const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// Trust proxy for accurate IP detection behind reverse proxies
-app.set('trust proxy', true);
 
 // Directories
 const DATA_DIR = path.resolve(process.cwd(), "data");
@@ -232,20 +228,6 @@ function cleanupIntermediateFiles(dir, title) {
 // Middleware
 app.use(cors());
 app.use(express.json());
-
-// Rate limiting to prevent DoS attacks
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: {
-    error: "Too many requests from this IP, please try again later."
-  },
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-});
-
-// Apply rate limiting to all requests
-app.use(limiter);
 
 // Serve static files in production
 if (process.env.NODE_ENV === "production") {
@@ -516,19 +498,8 @@ app.delete("/api/history", (req, res) => {
   res.json({ success: true });
 });
 
-// Stricter rate limiting for expensive operations (like refresh)
-const strictLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 5, // limit each IP to 5 requests per minute for expensive operations
-  message: {
-    error: "Too many requests for this operation, please wait before trying again."
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
 // API: Manual refresh
-app.post("/api/refresh", strictLimiter, (req, res) => {
+app.post("/api/refresh", (req, res) => {
   status.current = null;
   checkUpdates().catch((err) => console.error("Refresh error:", err));
   res.json(status);
