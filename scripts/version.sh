@@ -66,16 +66,39 @@ bump_version() {
     local new_version="${major}.${minor}.${patch}"
     echo -e "${GREEN}New version: ${new_version}${NC}"
 
+	# Update CHANGELOG.md
+	if [ -f CHANGELOG.md ]; then
+		# Create a backup
+		cp CHANGELOG.md CHANGELOG.md.bak
+		
+		# Use awk to insert the new version section after "## [Unreleased]"
+		awk '
+		/^## \[Unreleased\]/ {
+			print $0
+			print ""
+			print "## ['"${new_version}"'] - '"$(date +%Y-%m-%d)"'"
+			print ""
+			print "### Added"
+			print "- "
+			print ""
+			print "### Changed"
+			print "- "
+			next
+		}
+		{ print }
+		' CHANGELOG.md > CHANGELOG.md.tmp && mv CHANGELOG.md.tmp CHANGELOG.md
+		
+		# Clean up backup
+		rm CHANGELOG.md.bak
+	fi
+
     # Update package.json
     npm version "$new_version" --no-git-tag-version --yes
-
-    echo -e "${GREEN}✅ Version bumped to ${new_version}${NC}"
-    echo -e "${YELLOW}📝 Next steps:${NC}"
-    echo "  1. Review changes: git diff"
-    echo "  2. Commit changes: git add package.json package-lock.json && git commit -m 'chore: bump version to ${new_version}'"
-    echo "  3. Create tag: git tag v${new_version}"
-    echo "  4. Push: git push && git push --tags"
-    echo "  5. Or use GitHub Actions: Go to Actions → Release → Run workflow"
+    
+	# Commit changes and create git tag
+	git add package.json package-lock.json && git commit -m 'chore: bump version to ${new_version}'
+    git tag v${new_version}
+    git push && git push --tags
 }
 
 # Show current version
