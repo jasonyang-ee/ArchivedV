@@ -17,7 +17,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    if: ${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'doc: ') }}
+    if: "${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'doc: ') }}"
 
     steps:
       - name: Checkout code
