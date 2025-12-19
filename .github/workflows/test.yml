@@ -17,6 +17,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+    if: ${{ !startsWith(github.event.head_commit.message, 'doc: ') }}
 
     steps:
       - name: Checkout code
