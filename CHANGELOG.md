@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [1.2.1] - 2025-12-18
+
+### Added
+
+### Changed
+
+### Fixed
+
+
 ### Fixed
 
 - release token name typo in release.yml
