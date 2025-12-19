@@ -1,5 +1,4 @@
-[![DockerPublish](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/publish.yml/badge.svg)](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/publish.yml)
-[![Testing](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/testing.yml/badge.svg)](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/testing.yml)
+[![Test](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/test.yml/badge.svg)](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/test.yml)
 [![Release](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/release.yml/badge.svg)](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/release.yml)
 
 
@@ -72,55 +71,63 @@ services:
 
 ### Versioning Strategy
 
-This project uses **Semantic Versioning** managed through `package.json`. All releases are automated via GitHub Actions.
+This project uses **Semantic Versioning** managed through `package.json`. Releases are triggered by git tags (like [pocket-id](https://github.com/pocket-id/pocket-id)).
 
 - **MAJOR.MINOR.PATCH** format (e.g., `1.2.3`)
-- Versions are automatically bumped and tagged
-- Docker images are built for multiple platforms (AMD64/ARM64)
+- Releases triggered by `v*.*.*` tags
+- Docker images built for AMD64/ARM64
+- GitHub releases auto-published
 
 ### CI/CD Pipeline
 
-The project includes comprehensive CI/CD with three main workflows:
+#### 🧪 Test Workflow (`test.yml`)
+- **Trigger**: Push to main, PRs, manual
+- **Purpose**: Build and validate Docker images
+- **Jobs**: Build image, health check, API tests
 
-#### 🔄 Testing Workflow
-- **Trigger**: Push to any branch
-- **Purpose**: Build test images and validate functionality
-- **Jobs**: Build, test container health, API validation, frontend build
+#### 🚀 Release Workflow (`release.yml`)
+- **Trigger**: Tags matching `v*.*.*`
+- **Purpose**: Production release
+- **Jobs**: Multi-platform build, push to registries, create GitHub release
 
-#### 🚀 Release Workflow
-- **Trigger**: Version tags (`v*.*.*`) or manual dispatch
-- **Purpose**: Production deployment with semantic versioning
-- **Jobs**: Full test suite, multi-platform Docker build, GitHub release
+#### ✅ PR Validation (`pr-validation.yml`)
+- **Trigger**: Pull requests to main
+- **Purpose**: Validate code before merge
+- **Jobs**: Lint, build, quick tests
 
-#### ✅ PR Validation
-- **Trigger**: Pull requests to main/master
-- **Purpose**: Code quality assurance
-- **Jobs**: Linting, build verification, quick container tests
+### Creating a Release
 
-### Version Management
+The recommended way to create releases is using the `create-release.sh` script:
 
-#### Automated Release (Recommended)
 ```bash
-# Bump version and create release
-./scripts/version.sh patch    # or minor/major
-git add package.json package-lock.json
-git commit -m "chore: bump version to x.y.z"
-git push
-git tag vx.y.z
-git push --tags
+# Auto-detect release type based on commits
+./scripts/create-release.sh
+
+# Force a specific release type
+./scripts/create-release.sh --patch   # Bug fixes (1.2.3 → 1.2.4)
+./scripts/create-release.sh --minor   # New features (1.2.3 → 1.3.0)
+./scripts/create-release.sh --major   # Breaking changes (1.2.3 → 2.0.0)
+
+# Skip confirmation prompts
+./scripts/create-release.sh --minor -y
 ```
 
-#### Manual Release via GitHub Actions
-1. Go to **Actions** → **Release** → **Run workflow**
-2. Select version bump type
-3. The workflow handles everything automatically
+The script will:
+1. Auto-detect release type from commit history (`feat:` → minor, `fix:` → patch)
+2. Update `package.json` version
+3. Add new section to `CHANGELOG.md`
+4. Commit, tag, and push
+5. Create a GitHub draft release
 
 ### Required GitHub Secrets
-- `USERNAME_DOCKERHUB`: Docker Hub username
-- `TOKEN_DOCKERHUB`: Docker Hub access token
-- `TOKEN_GITHUB`: GitHub personal access token
 
-For detailed versioning and deployment instructions, see [VERSIONING.md](VERSIONING.md).
+| Secret | Description |
+|--------|-------------|
+| `USERNAME_DOCKERHUB` | Docker Hub username |
+| `TOKEN_DOCKERHUB` | Docker Hub access token |
+| `GITHUB_TOKEN` | Auto-provided by GitHub Actions |
+
+For detailed versioning documentation, see [VERSIONING.md](VERSIONING.md).
 
 ## Web Interface
 

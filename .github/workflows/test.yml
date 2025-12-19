@@ -1,83 +1,98 @@
-name: "Test"
+name: Test
 
 on:
   push:
     branches:
-      - "*"
+      - main
+      - "feature/**"
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
   workflow_call:
 
 jobs:
-  Build_Test_Image:
-    runs-on: ubuntu-22.04
+  build-test:
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
 
     steps:
-      - name: Checkout Project
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Docker Meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ${{ secrets.USERNAME_DOCKERHUB }}/archivedv
-            ghcr.io/${{ github.actor }}/archivedv
-          tags: |
-            type=raw,value=test
-          flavor: |
-            latest=false
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.USERNAME_DOCKERHUB }}
-          password: ${{ secrets.TOKEN_DOCKERHUB }}
-
-      - name: Log in to Github Container Registry
-        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.TOKEN_GITHUB }}
-
-      - name: Set QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set Buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Cache Docker layers
-        uses: actions/cache@v3
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
-
-      - name: Build Docker Image
-        uses: docker/build-push-action@v5
+      - name: Build Docker Image (test)
+        uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          push: false
+          load: true
+          tags: archivedv:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Move cache
+      - name: Start container
         run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+          docker run -d \
+            --name archivedv-test \
+            -p 3000:3000 \
+            -e NODE_ENV=production \
+            archivedv:test
 
-  Test_Image:
-    runs-on: ubuntu-22.04
+      - name: Wait for container to be ready
+        run: |
+          echo "Waiting for container to start..."
+          sleep 10
+          
+      - name: Container health check
+        run: |
+          for i in {1..30}; do
+            if curl -s http://localhost:3000 > /dev/null; then
+              echo "✓ Server is responding"
+              exit 0
+            fi
+            echo "Attempt $i: Waiting for server..."
+            sleep 2
+          done
+          echo "✗ Server failed to respond"
+          docker logs archivedv-test
+          exit 1
 
-    steps:
-      - name: Checkout Project
-        uses: actions/checkout@v4
+      - name: Test API endpoints
+        run: |
+          echo "Testing API endpoints..."
+          
+          # Test main page
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/)
+          if [ "$HTTP_STATUS" -eq 200 ]; then
+            echo "✓ Main page: OK ($HTTP_STATUS)"
+          else
+            echo "✗ Main page: Failed ($HTTP_STATUS)"
+            exit 1
+          fi
+          
+          # Test API endpoint
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/api/status)
+          if [ "$HTTP_STATUS" -eq 200 ] || [ "$HTTP_STATUS" -eq 404 ]; then
+            echo "✓ API status: OK ($HTTP_STATUS)"
+          else
+            echo "✗ API status: Failed ($HTTP_STATUS)"
+            exit 1
+          fi
+
+      - name: Show container logs
+        if: always()
+        run: docker logs archivedv-test
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop archivedv-test || true
+          docker rm archivedv-test || true
 
       - name: Build Docker Image
         run: docker build -t archivedv-test:latest .

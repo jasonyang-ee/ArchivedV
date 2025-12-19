@@ -1,17 +1,16 @@
-name: "PR Validation"
+name: PR Validation
 
 on:
   pull_request:
     branches:
       - main
-      - master
 
 jobs:
-  Validate:
-    runs-on: ubuntu-22.04
+  validate:
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Project
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -19,44 +18,55 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Install Dependencies
-        run: npm install
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Lint Code
+      - name: Lint check
         run: |
-          # Add linting if you have ESLint configured
-          echo "✅ Code linting passed"
+          echo "✓ Linting passed (add ESLint for stricter checks)"
 
-      - name: Build Frontend
+      - name: Build frontend
         run: npm run build
 
-      - name: Verify build output
+      - name: Verify build artifacts
         run: |
           echo "Checking build artifacts..."
-          test -d dist || (echo "ERROR: dist directory not found" && exit 1)
-          test -f dist/index.html || (echo "ERROR: index.html not found" && exit 1)
-          test -d dist/assets || (echo "ERROR: assets directory not found" && exit 1)
-          echo "✅ Build artifacts verified"
+          test -d dist || (echo "✗ dist directory not found" && exit 1)
+          test -f dist/index.html || (echo "✗ index.html not found" && exit 1)
+          test -d dist/assets || (echo "✗ assets directory not found" && exit 1)
+          echo "✓ Build artifacts verified"
 
-      - name: Test Docker Build
+      - name: Test Docker build
         run: |
           echo "Testing Docker build..."
-          docker build -t archivedv-pr-test:latest . || (echo "ERROR: Docker build failed" && exit 1)
-          echo "✅ Docker build successful"
+          docker build -t archivedv-pr-test:latest .
+          echo "✓ Docker build successful"
 
-      - name: Quick Container Test
+      - name: Quick container test
         run: |
           echo "Running quick container test..."
           docker run -d --name archivedv-pr-test -p 3000:3000 archivedv-pr-test:latest
-
+          
           # Wait for startup
-          sleep 15
+          sleep 10
+          
+          # Health check
+          for i in {1..15}; do
+            if curl -s http://localhost:3000 > /dev/null; then
+              echo "✓ Container health check passed"
+              exit 0
+            fi
+            sleep 2
+          done
+          
+          echo "✗ Health check failed"
+          docker logs archivedv-pr-test
+          exit 1
 
-          # Quick health check
-          timeout 30 bash -c 'until curl -f http://127.0.0.1:3000 > /dev/null 2>&1; do sleep 2; done' || (echo "ERROR: Health check failed" && docker logs archivedv-pr-test && exit 1)
-
-          echo "✅ Container health check passed"
-
-          # Cleanup
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop archivedv-pr-test || true
+          docker rm archivedv-pr-test || true
           docker stop archivedv-pr-test || true
           docker rm archivedv-pr-test || true

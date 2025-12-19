@@ -7,34 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.1.6] - 2025-12-18
+### Changed
+
+- Refactored CI/CD pipeline with professional release workflow
+- Migrated to tag-triggered releases (like pocket-id)
+- Added create-release.sh script for automated versioning
+- Simplified version.sh to be a utility script
+- Updated GitHub Actions to modern versions
+
+## [1.1.4] - 2025-12-18
 
 ### Added
-- 
 
-### Changed
-- 
-
-## [1.1.5] - 2025-12-18
-
-### Changed
-- Also git add CHANGELOG.md on version bump commit
-
-### Added
 - Initial CI/CD pipeline with semantic versioning
-- Comprehensive testing workflow
+- Comprehensive testing workflow  
 - Multi-platform Docker builds (AMD64/ARM64)
 - Automated release management
 - PR validation workflow
 
 ### Changed
-- Migrated from git tag-based to package.json-based versioning
 
-### Technical
-- Added GitHub Actions workflows for testing, release, and PR validation
-- Implemented version management script (`scripts/version.sh`)
-- Configured Docker metadata action for consistent tagging
-- Added multi-platform Docker builds
+- Migrated from git tag-based to package.json-based versioning
 
 ## [1.1.3] - 2025-12-18
 
