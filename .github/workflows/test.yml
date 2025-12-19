@@ -73,7 +73,6 @@ jobs:
 
   Test_Image:
     runs-on: ubuntu-22.04
-    needs: Build_Image
 
     steps:
       - name: Checkout Project
