@@ -217,16 +217,7 @@ echo -e "${GREEN}New version: ${BOLD}$NEW_VERSION${NC}"
 # -----------------------------------------------------------------------------
 
 if [ "$SKIP_CONFIRM" != true ]; then
-    echo ""
-    echo -e "${YELLOW}This will:${NC}"
-    echo "  1. Update package.json to version $NEW_VERSION"
-    echo "  2. Add new section to CHANGELOG.md"
-    echo "  3. Commit changes with message 'release: v$NEW_VERSION'"
-    echo "  4. Create git tag 'v$NEW_VERSION'"
-    echo "  5. Push commit and tag to remote"
-    echo "  6. Create a GitHub draft release"
-    echo ""
-    read -p "Do you want to proceed? (y/n) " CONFIRM
+	read -p "${YELLOW}Do you want to proceed? (y/n) ${NC}" CONFIRM
     if [[ "$CONFIRM" != "y" ]]; then
         echo -e "${RED}Release process canceled.${NC}"
         exit 1
@@ -261,12 +252,15 @@ awk -v version="$NEW_VERSION" -v date="$DATE_TODAY" '
     print ""
     print "### Added"
     print ""
+    print "- "
     print ""
     print "### Changed"
     print ""
+    print "- "
     print ""
     print "### Fixed"
     print ""
+    print "- "
     print ""
     print "## [" version "] - " date
     next
