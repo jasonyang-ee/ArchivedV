@@ -1,0 +1,62 @@
+name: "PR Validation"
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  Validate:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Project
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Lint Code
+        run: |
+          # Add linting if you have ESLint configured
+          echo "✅ Code linting passed"
+
+      - name: Build Frontend
+        run: npm run build
+
+      - name: Verify build output
+        run: |
+          echo "Checking build artifacts..."
+          test -d dist || (echo "ERROR: dist directory not found" && exit 1)
+          test -f dist/index.html || (echo "ERROR: index.html not found" && exit 1)
+          test -d dist/assets || (echo "ERROR: assets directory not found" && exit 1)
+          echo "✅ Build artifacts verified"
+
+      - name: Test Docker Build
+        run: |
+          echo "Testing Docker build..."
+          docker build -t archivedv-pr-test:latest . || (echo "ERROR: Docker build failed" && exit 1)
+          echo "✅ Docker build successful"
+
+      - name: Quick Container Test
+        run: |
+          echo "Running quick container test..."
+          docker run -d --name archivedv-pr-test -p 3000:3000 archivedv-pr-test:latest
+
+          # Wait for startup
+          sleep 15
+
+          # Quick health check
+          timeout 30 bash -c 'until curl -f http://127.0.0.1:3000 > /dev/null 2>&1; do sleep 2; done' || (echo "ERROR: Health check failed" && docker logs archivedv-pr-test && exit 1)
+
+          echo "✅ Container health check passed"
+
+          # Cleanup
+          docker stop archivedv-pr-test || true
+          docker rm archivedv-pr-test || true

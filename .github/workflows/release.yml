@@ -1,0 +1,164 @@
+name: "Release"
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  Test:
+    uses: ./.github/workflows/testing.yml
+
+  Release:
+    needs: Test
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout Project
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Determine Version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual trigger - bump version based on input
+            CURRENT_VERSION=$(node -p "require('./package.json').version")
+            echo "Current version: $CURRENT_VERSION"
+
+            # Bump version using npm version
+            npm version ${{ inputs.version_type }} --no-git-tag-version
+            NEW_VERSION=$(node -p "require('./package.json').version")
+            echo "New version: $NEW_VERSION"
+            echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+            echo "tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
+          else
+            # Tag trigger - use the tag version
+            VERSION=${GITHUB_REF#refs/tags/v}
+            echo "Using tag version: $VERSION"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Docker Meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ secrets.USERNAME_DOCKERHUB }}/archivedv
+            ghcr.io/${{ github.actor }}/archivedv
+          tags: |
+            type=ref,event=tag
+            type=raw,value=latest
+            type=raw,value=${{ steps.version.outputs.version }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.USERNAME_DOCKERHUB }}
+          password: ${{ secrets.TOKEN_DOCKERHUB }}
+
+      - name: Log in to Github Container Registry
+        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.TOKEN_GITHUB }}
+
+      - name: Set QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+      - name: Create GitHub Release
+        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          release_name: Release ${{ steps.version.outputs.tag }}
+          body: |
+            ## Changes in this release
+
+            ### Docker Images
+            - `docker pull ${{ secrets.USERNAME_DOCKERHUB }}/archivedv:${{ steps.version.outputs.version }}`
+            - `docker pull ${{ secrets.USERNAME_DOCKERHUB }}/archivedv:latest`
+            - `docker pull ghcr.io/${{ github.actor }}/archivedv:${{ steps.version.outputs.version }}`
+            - `docker pull ghcr.io/${{ github.actor }}/archivedv:latest`
+
+            ### What's New
+            - Version ${{ steps.version.outputs.version }}
+            - Built and tested automatically
+            - Multi-platform support (AMD64/ARM64)
+
+            ### Installation
+            ```bash
+            docker run -d \
+              -p 3000:3000 \
+              -v /path/to/data:/app/data \
+              ${{ secrets.USERNAME_DOCKERHUB }}/archivedv:latest
+            ```
+          draft: false
+          prerelease: false
+
+      - name: Commit version bump
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add package.json package-lock.json
+          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
+          git push
+
+      - name: Create Release Tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git tag ${{ steps.version.outputs.tag }}
+          git push origin ${{ steps.version.outputs.tag }}

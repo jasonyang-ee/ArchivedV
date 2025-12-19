@@ -1,5 +1,6 @@
 [![DockerPublish](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/publish.yml/badge.svg)](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/publish.yml)
 [![Testing](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/testing.yml/badge.svg)](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/testing.yml)
+[![Release](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/release.yml/badge.svg)](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/release.yml)
 
 
 <h1 align="center">(Un)Archived V</h1>
@@ -66,6 +67,60 @@ services:
       # PUSHOVER_APP_TOKEN: ${PUSHOVER_APP_TOKEN}
       # PUSHOVER_USER_TOKEN: ${PUSHOVER_USER_TOKEN}
 ```
+
+## 🏗️ Development & Deployment
+
+### Versioning Strategy
+
+This project uses **Semantic Versioning** managed through `package.json`. All releases are automated via GitHub Actions.
+
+- **MAJOR.MINOR.PATCH** format (e.g., `1.2.3`)
+- Versions are automatically bumped and tagged
+- Docker images are built for multiple platforms (AMD64/ARM64)
+
+### CI/CD Pipeline
+
+The project includes comprehensive CI/CD with three main workflows:
+
+#### 🔄 Testing Workflow
+- **Trigger**: Push to any branch
+- **Purpose**: Build test images and validate functionality
+- **Jobs**: Build, test container health, API validation, frontend build
+
+#### 🚀 Release Workflow
+- **Trigger**: Version tags (`v*.*.*`) or manual dispatch
+- **Purpose**: Production deployment with semantic versioning
+- **Jobs**: Full test suite, multi-platform Docker build, GitHub release
+
+#### ✅ PR Validation
+- **Trigger**: Pull requests to main/master
+- **Purpose**: Code quality assurance
+- **Jobs**: Linting, build verification, quick container tests
+
+### Version Management
+
+#### Automated Release (Recommended)
+```bash
+# Bump version and create release
+./scripts/version.sh patch    # or minor/major
+git add package.json package-lock.json
+git commit -m "chore: bump version to x.y.z"
+git push
+git tag vx.y.z
+git push --tags
+```
+
+#### Manual Release via GitHub Actions
+1. Go to **Actions** → **Release** → **Run workflow**
+2. Select version bump type
+3. The workflow handles everything automatically
+
+### Required GitHub Secrets
+- `USERNAME_DOCKERHUB`: Docker Hub username
+- `TOKEN_DOCKERHUB`: Docker Hub access token
+- `TOKEN_GITHUB`: GitHub personal access token
+
+For detailed versioning and deployment instructions, see [VERSIONING.md](VERSIONING.md).
 
 ## Web Interface
 

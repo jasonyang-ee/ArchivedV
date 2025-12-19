@@ -1,65 +1,197 @@
-name: 'Testing'
+name: "Testing"
 
 on:
   push:
     branches:
-      - '*'
+      - "*"
   workflow_dispatch:
 
 jobs:
-  Build_Upload:
+  Build_Image:
     runs-on: ubuntu-22.04
     permissions:
       contents: read
       packages: write
 
     steps:
-    - name: Checkout Project
-      uses: actions/checkout@v4
-      
-    - name: Docker Meta
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: |
-          ${{ secrets.USERNAME_DOCKERHUB }}/archivedv
-          ghcr.io/${{ github.actor }}/archivedv
-        tags: type=raw,value=test
-        flavor: onlatest=false
+      - name: Checkout Project
+        uses: actions/checkout@v4
 
-    - name: Login to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.USERNAME_DOCKERHUB }}
-        password: ${{ secrets.TOKEN_DOCKERHUB }}
+      - name: Docker Meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ secrets.USERNAME_DOCKERHUB }}/archivedv
+            ghcr.io/${{ github.actor }}/archivedv
+          tags: |
+            type=raw,value=test
+          flavor: |
+            latest=false
 
-    - name: Log in to Github Container Registry
-      uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.TOKEN_GITHUB }}
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.USERNAME_DOCKERHUB }}
+          password: ${{ secrets.TOKEN_DOCKERHUB }}
 
-    - name: Set QEMU
-      uses: docker/setup-qemu-action@v3
+      - name: Log in to Github Container Registry
+        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.TOKEN_GITHUB }}
 
-    - name: Set Buildx
-      uses: docker/setup-buildx-action@v3
+      - name: Set QEMU
+        uses: docker/setup-qemu-action@v3
 
-    - name: Cache Docker layers
-      uses: actions/cache@v3
-      with:
-        path: /tmp/.buildx-cache
-        key: ${{ runner.os }}-buildx-${{ github.sha }}
-        restore-keys: |
-          ${{ runner.os }}-buildx-
+      - name: Set Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Build and Upload AMD64 and ARM64
-      uses: docker/build-push-action@v4
-      id: build_multiarch
-      with:
-        context: .
-        platforms: linux/amd64,linux/arm64
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Build Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+  Image_Test:
+    runs-on: ubuntu-22.04
+    needs: Build_Image
+
+    steps:
+      - name: Checkout Project
+        uses: actions/checkout@v4
+
+      - name: Build Docker Image
+        run: docker build -t archivedv-test:latest .
+
+      - name: Create test data directory
+        run: mkdir -p ./test-data
+
+      - name: Start Docker Container
+        run: |
+          docker run -d --name archivedv-test \
+            -p 3000:3000 \
+            -v $PWD/test-data:/app/data \
+            -e NODE_ENV=production \
+            archivedv-test:latest
+
+      - name: Wait for server to be ready
+        run: |
+          echo "Waiting for server to be ready..."
+          sleep 10
+
+          # Check if container is running
+          echo "Checking container status..."
+          docker ps -a | grep archivedv-test
+
+          # Check container logs to see if server started
+          echo "Container logs:"
+          docker logs archivedv-test || echo "Could not get logs"
+
+          echo "Waiting for HTTP response on port 3000..."
+          timeout 120 bash -c 'until curl -f http://127.0.0.1:3000 > /dev/null 2>&1; do
+              echo "Still waiting... (curl exit code: $?)"
+              sleep 3
+          done' || (echo "ERROR: Server health check failed after 120 seconds" && docker logs archivedv-test && exit 1)
+
+          echo "Server responding on root endpoint, checking /api/config..."
+          timeout 30 bash -c 'until curl -f http://127.0.0.1:3000/api/config > /dev/null 2>&1; do
+              echo "Still waiting for /api/config..."
+              sleep 2
+          done' || (echo "ERROR: API endpoint /api/config not responding" && docker logs archivedv-test && exit 1)
+
+          echo "Server is ready!"
+
+      - name: Check server logs
+        run: |
+          echo "=== Server Logs ==="
+          docker logs archivedv-test
+
+          # Verify expected log messages
+          docker logs archivedv-test 2>&1 | grep -q "Server running on port" || (echo "ERROR: Server start message not found" && exit 1)
+          docker logs archivedv-test 2>&1 | grep -q "Environment: production" || (echo "ERROR: Environment message not found" && exit 1)
+
+          echo "✅ Server logs verification passed"
+
+      - name: Test API endpoints
+        run: |
+          echo "Testing API endpoints..."
+
+          # Test GET /api/config
+          curl -f http://localhost:3000/api/config || (echo "ERROR: GET /api/config failed" && exit 1)
+          echo "✅ GET /api/config passed"
+
+          # Test GET /api/status
+          curl -f http://localhost:3000/api/status || (echo "ERROR: GET /api/status failed" && exit 1)
+          echo "✅ GET /api/status passed"
+
+          # Test GET /api/history
+          RESPONSE=$(curl -s http://localhost:3000/api/history)
+          if [ "$RESPONSE" != "[]" ]; then
+            echo "ERROR: Expected empty array from /api/history"
+            exit 1
+          fi
+          echo "✅ GET /api/history passed"
+
+      - name: Test frontend
+        run: |
+          echo "Testing frontend..."
+          curl -f http://localhost:3000/ || (echo "ERROR: Frontend not accessible" && exit 1)
+          curl -s http://localhost:3000/ | grep -q "<!DOCTYPE html>" || (echo "ERROR: Frontend HTML not correct" && exit 1)
+          echo "✅ Frontend test passed"
+
+      - name: Test health check
+        run: |
+          echo "Testing health check..."
+          curl -f http://localhost:3000/ || (echo "ERROR: Health check failed" && exit 1)
+          echo "✅ Health check passed"
+
+      - name: Stop and remove container
+        if: always()
+        run: |
+          docker stop archivedv-test || true
+          docker rm archivedv-test || true
+
+  Cloudflare_Build_Test:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Project
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build Frontend
+        run: npm run build
+
+      - name: Verify build output
+        run: |
+          echo "Checking build artifacts..."
+          test -d dist || (echo "ERROR: dist directory not found" && exit 1)
+          test -f dist/index.html || (echo "ERROR: index.html not found" && exit 1)
+          test -d dist/assets || (echo "ERROR: assets directory not found" && exit 1)
+          echo "✅ Build artifacts verified"
