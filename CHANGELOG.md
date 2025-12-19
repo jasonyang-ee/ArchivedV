@@ -13,6 +13,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 
+
+### Fixed
+
+- 
+
+## [1.4.2] - 2025-12-19
+
+### Added
+
+- 
+
+### Changed
+
 - Removed rate limiting middleware to prevent localhost health check and reverse proxy conflicts
 
 ### Fixed
