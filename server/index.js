@@ -20,6 +20,9 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust proxy for accurate IP detection behind reverse proxies
+app.set('trust proxy', true);
+
 // Directories
 const DATA_DIR = path.resolve(process.cwd(), "data");
 const DOWNLOAD_DIR = path.resolve(process.cwd(), "download");
