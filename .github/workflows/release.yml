@@ -19,6 +19,9 @@ on:
 jobs:
   Test:
     uses: ./.github/workflows/test.yml
+    permissions:
+      contents: read
+      packages: write
 
   Release:
     needs: Test
