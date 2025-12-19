@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  Build Test Image:
+  Build_Test_Image:
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -71,7 +71,7 @@ jobs:
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
-  Test Image:
+  Test_Image:
     runs-on: ubuntu-22.04
     needs: Build_Image
 

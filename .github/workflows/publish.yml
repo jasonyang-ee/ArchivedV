@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 jobs:
-  Build_Upload:
+  Build_And_Upload:
     runs-on: ubuntu-22.04
     permissions:
       contents: read
