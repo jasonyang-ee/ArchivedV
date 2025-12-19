@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.6] - 2025-12-18
+
+### Added
+- 
+
+### Changed
+- 
+
+## [1.1.5] - 2025-12-18
+
+### Changed
+- Also git add CHANGELOG.md on version bump commit
+
 ### Added
 - Initial CI/CD pipeline with semantic versioning
 - Comprehensive testing workflow
