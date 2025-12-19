@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 
 
+## [1.4.1] - 2025-12-19
+
+### Fixed
+
+- Fixed express-rate-limit error when running behind reverse proxy by enabling trust proxy setting
+
 ## [1.4.0] - 2025-12-19
 
 ### Added
