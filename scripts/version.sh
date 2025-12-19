@@ -96,7 +96,7 @@ bump_version() {
     npm version "$new_version" --no-git-tag-version --yes
     
 	# Commit changes and create git tag
-	git add package.json package-lock.json && git commit -m 'chore: bump version to ${new_version}'
+	git add package.json package-lock.json CHANGELOG.md && git commit -m 'chore: bump version to ${new_version}'
     git tag v${new_version}
     git push && git push --tags
 }
