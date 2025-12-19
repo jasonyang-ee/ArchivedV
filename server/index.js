@@ -275,6 +275,13 @@ app.post("/api/channels", async (req, res) => {
   const plainHandleMatch = link.match(/^@?([a-zA-Z0-9_-]+)$/);
   if (plainHandleMatch) {
     username = plainHandleMatch[1];
+    
+    // Sanitize username to prevent URL manipulation
+    // Only allow alphanumeric, underscore, and hyphen
+    if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+      return res.status(400).json({ error: "Invalid username format" });
+    }
+    
     const aboutUrl = `https://www.youtube.com/@${username}/about`;
     if (!isValidYouTubeUrl(aboutUrl)) {
       return res.status(400).json({ error: "Invalid YouTube URL" });
@@ -296,6 +303,13 @@ app.post("/api/channels", async (req, res) => {
   else if (link.match(/youtube\.com\/@([^\/\?]+)/)) {
     const handleMatch = link.match(/youtube\.com\/@([^\/\?]+)/);
     username = handleMatch[1];
+    
+    // Sanitize username to prevent URL manipulation
+    // Only allow alphanumeric, underscore, and hyphen
+    if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+      return res.status(400).json({ error: "Invalid username format" });
+    }
+    
     const aboutUrl = `https://www.youtube.com/@${username}/about`;
     if (!isValidYouTubeUrl(aboutUrl)) {
       return res.status(400).json({ error: "Invalid YouTube URL" });

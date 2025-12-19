@@ -45,7 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added stricter rate limiting for expensive operations (refresh endpoint)
 - Added SSRF protection with URL validation for YouTube requests
 - Implemented allow-list validation for YouTube domains only
-- Blocked localhost and private IP ranges in HTTP requests 
+- Blocked localhost and private IP ranges in HTTP requests
+- Added additional username sanitization to prevent URL manipulation attacks 
 
 ## [1.2.3] - 2025-12-18
 
