@@ -7,15 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-
-## [1.2.1] - 2025-12-18
-
 ### Added
+
 
 ### Changed
 
+
 ### Fixed
 
+
+## [1.2.2] - 2025-12-18
+
+### Fixed
+
+- changelog format issue in create-release.sh
+
+## [1.2.1] - 2025-12-18
 
 ### Fixed
 
