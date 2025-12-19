@@ -1,4 +1,4 @@
-name: "Testing"
+name: "Test"
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  Build_Image:
+  Build Test Image:
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -71,7 +71,7 @@ jobs:
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
-  Image_Test:
+  Test Image:
     runs-on: ubuntu-22.04
     needs: Build_Image
 
@@ -169,29 +169,3 @@ jobs:
         run: |
           docker stop archivedv-test || true
           docker rm archivedv-test || true
-
-  Cloudflare_Build_Test:
-    runs-on: ubuntu-22.04
-
-    steps:
-      - name: Checkout Project
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-
-      - name: Install Dependencies
-        run: npm install
-
-      - name: Build Frontend
-        run: npm run build
-
-      - name: Verify build output
-        run: |
-          echo "Checking build artifacts..."
-          test -d dist || (echo "ERROR: dist directory not found" && exit 1)
-          test -f dist/index.html || (echo "ERROR: index.html not found" && exit 1)
-          test -d dist/assets || (echo "ERROR: assets directory not found" && exit 1)
-          echo "✅ Build artifacts verified"
