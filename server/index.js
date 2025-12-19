@@ -10,6 +10,7 @@ import cron from "node-cron";
 import { spawn } from "child_process";
 import Pushover from "pushover-notifications";
 import dotenv from "dotenv";
+import rateLimit from "express-rate-limit";
 
 dotenv.config({quiet: true});
 
@@ -113,6 +114,44 @@ function sanitize(str) {
   return str.replace(/[\/\\:*?"<>|]/g, "").trim();
 }
 
+// URL validation to prevent SSRF attacks
+function isValidYouTubeUrl(urlString) {
+  try {
+    const url = new URL(urlString);
+    
+    // Only allow HTTPS
+    if (url.protocol !== 'https:') {
+      return false;
+    }
+    
+    // Only allow youtube.com and youtu.be domains
+    const allowedDomains = ['youtube.com', 'www.youtube.com', 'youtu.be'];
+    if (!allowedDomains.includes(url.hostname)) {
+      return false;
+    }
+    
+    // Prevent localhost and private IP ranges
+    const hostname = url.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('127.')) {
+      return false;
+    }
+    
+    // Check for private IP ranges
+    const ipMatch = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+    if (ipMatch) {
+      const [_, a, b, c, d] = ipMatch.map(Number);
+      // 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+      if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) {
+        return false;
+      }
+    }
+    
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Safe directory cleanup - only removes truly empty directories, never deletes video files
 function safeCleanupDirectory(dir, reason = "") {
   try {
@@ -191,6 +230,20 @@ function cleanupIntermediateFiles(dir, title) {
 app.use(cors());
 app.use(express.json());
 
+// Rate limiting to prevent DoS attacks
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: {
+    error: "Too many requests from this IP, please try again later."
+  },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+
+// Apply rate limiting to all requests
+app.use(limiter);
+
 // Serve static files in production
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(path.join(__dirname, "..", "dist")));
@@ -223,6 +276,9 @@ app.post("/api/channels", async (req, res) => {
   if (plainHandleMatch) {
     username = plainHandleMatch[1];
     const aboutUrl = `https://www.youtube.com/@${username}/about`;
+    if (!isValidYouTubeUrl(aboutUrl)) {
+      return res.status(400).json({ error: "Invalid YouTube URL" });
+    }
     try {
       const html = (await axios.get(aboutUrl)).data;
       const canonMatch = html.match(
@@ -241,6 +297,9 @@ app.post("/api/channels", async (req, res) => {
     const handleMatch = link.match(/youtube\.com\/@([^\/\?]+)/);
     username = handleMatch[1];
     const aboutUrl = `https://www.youtube.com/@${username}/about`;
+    if (!isValidYouTubeUrl(aboutUrl)) {
+      return res.status(400).json({ error: "Invalid YouTube URL" });
+    }
     try {
       const html = (await axios.get(aboutUrl)).data;
       const canonMatch = html.match(
@@ -277,18 +336,31 @@ app.post("/api/channels", async (req, res) => {
   // Try to fetch the actual channel name from RSS feed
   let channelName = username;
   try {
-    const xml = (await axios.get(xmlLink)).data;
-    const result = await xmlParser.parseStringPromise(xml);
-    if (result.feed.author && result.feed.author[0] && result.feed.author[0].name && result.feed.author[0].name[0]) {
-      channelName = result.feed.author[0].name[0];
+    if (!isValidYouTubeUrl(xmlLink)) {
+      console.error(`Invalid RSS URL for channel ${username}: ${xmlLink}`);
+      channelName = username; // fallback
+    } else {
+      const xml = (await axios.get(xmlLink)).data;
+      const result = await xmlParser.parseStringPromise(xml);
+      if (result.feed.author && result.feed.author[0] && result.feed.author[0].name && result.feed.author[0].name[0]) {
+        channelName = result.feed.author[0].name[0];
+      }
     }
   } catch (e) {
     console.warn("Failed to fetch channel name from RSS, using username");
   }
   
   if (!existing) {
+    // Final validation before saving
+    if (!isValidYouTubeUrl(xmlLink)) {
+      return res.status(400).json({ error: "Generated RSS URL is invalid" });
+    }
     db.data.channels.push({ id, link: xmlLink, username, channelName });
   } else {
+    // Validate existing link too
+    if (!isValidYouTubeUrl(xmlLink)) {
+      return res.status(400).json({ error: "Generated RSS URL is invalid" });
+    }
     if (!existing.username) existing.username = username;
     if (!existing.channelName) existing.channelName = channelName;
   }
@@ -427,8 +499,19 @@ app.delete("/api/history", (req, res) => {
   res.json({ success: true });
 });
 
+// Stricter rate limiting for expensive operations (like refresh)
+const strictLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5, // limit each IP to 5 requests per minute for expensive operations
+  message: {
+    error: "Too many requests for this operation, please wait before trying again."
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // API: Manual refresh
-app.post("/api/refresh", (req, res) => {
+app.post("/api/refresh", strictLimiter, (req, res) => {
   status.current = null;
   checkUpdates().catch((err) => console.error("Refresh error:", err));
   res.json(status);
@@ -482,6 +565,11 @@ async function checkUpdates() {
 
   for (const ch of channels) {
     try {
+      // Validate URL before making request to prevent SSRF
+      if (!isValidYouTubeUrl(ch.link)) {
+        console.error(`Skipping invalid channel URL: ${ch.link}`);
+        continue;
+      }
       const xml = (await axios.get(ch.link)).data;
       const result = await xmlParser.parseStringPromise(xml);
       const entries = result.feed.entry || [];

@@ -9,15 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- 
+- CONTRIBUTING.md with comprehensive contribution guidelines
+- SECURITY.md with security policy and vulnerability reporting process
+- Dependabot configuration for automated dependency updates (npm, Docker, GitHub Actions)
 
 ### Changed
 
-- 
+- Improved release tooling with better error handling and logging
+- Enhanced CI/CD pipeline with automated dependency management
 
 ### Fixed
 
-- 
+- Changelog formatting issues in create-release.sh script
+- Release token naming in GitHub Actions workflows
+- Various syntax and permission fixes in CI/CD scripts
+
+### Security
+
+- Added rate limiting middleware to prevent DoS attacks
+- Implemented express-rate-limit with configurable limits
+- Added stricter rate limiting for expensive operations (refresh endpoint)
+- Added SSRF protection with URL validation for YouTube requests
+- Implemented allow-list validation for YouTube domains only
+- Blocked localhost and private IP ranges in HTTP requests 
 
 ## [1.2.3] - 2025-12-18
 
