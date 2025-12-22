@@ -10,6 +10,7 @@ import cron from "node-cron";
 import { spawn } from "child_process";
 import Pushover from "pushover-notifications";
 import dotenv from "dotenv";
+import rateLimit from "express-rate-limit";
 
 dotenv.config({quiet: true});
 
@@ -18,6 +19,40 @@ const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+const DEFAULT_COOKIES_PATH = path.join(__dirname, "..", "data", "youtube_cookies.txt");
+const YTDLP_COOKIES_PATH = process.env.YTDLP_COOKIES_PATH || DEFAULT_COOKIES_PATH;
+const MAX_AUTH_FAILURE_ATTEMPTS = Number(process.env.MAX_AUTH_FAILURE_ATTEMPTS) || 3;
+
+// Reverse proxy support (Caddy, nginx, etc.)
+// Set TRUST_PROXY=1 (or true) when behind a reverse proxy so req.ip reflects the real client IP
+const TRUST_PROXY_RAW = process.env.TRUST_PROXY;
+if (TRUST_PROXY_RAW !== undefined) {
+  const lowered = String(TRUST_PROXY_RAW).toLowerCase();
+  if (lowered === "true") app.set("trust proxy", true);
+  else if (lowered === "false") app.set("trust proxy", false);
+  else {
+    const asNumber = Number(TRUST_PROXY_RAW);
+    if (!Number.isNaN(asNumber)) app.set("trust proxy", asNumber);
+    else app.set("trust proxy", true);
+  }
+}
+
+function isLoopbackIp(ip) {
+  if (!ip) return false;
+  // Express may provide IPv4-mapped IPv6 form like ::ffff:127.0.0.1
+  return ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
+}
+
+// Rate limit for expensive file system operations (CodeQL: js/missing-rate-limiting)
+// Skip loopback so Docker health checks and local reverse proxy access aren't blocked.
+const staticFsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: Number(process.env.STATIC_RATELIMIT_MAX) || 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => isLoopbackIp(req.ip),
+});
 
 const MAX_CONCURRENT_DOWNLOADS = Number(process.env.MAX_CONCURRENT_DOWNLOADS) || 0; // 0 = unlimited
 const FEED_FETCH_RETRIES = Number(process.env.FEED_FETCH_RETRIES) || 3;
@@ -39,10 +74,10 @@ if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR, { recursive: true }
 
 // Database helper
 const db = {
-  data: { channels: [], keywords: [], ignoreKeywords: [], history: [], currentDownloads: [], retryQueue: [], dateFormat: 'YYYY-MM-DD' },
+  data: { channels: [], keywords: [], ignoreKeywords: [], history: [], currentDownloads: [], retryQueue: [], dateFormat: 'YYYY-MM-DD', auth: { useCookies: false } },
   read() {
     if (!fs.existsSync(DB_PATH)) {
-      this.data = { channels: [], keywords: [], ignoreKeywords: [], history: [], currentDownloads: [], retryQueue: [], dateFormat: 'YYYY-MM-DD' };
+      this.data = { channels: [], keywords: [], ignoreKeywords: [], history: [], currentDownloads: [], retryQueue: [], dateFormat: 'YYYY-MM-DD', auth: { useCookies: false } };
       fs.writeFileSync(DB_PATH, JSON.stringify(this.data, null, 2));
     } else {
       try {
@@ -52,6 +87,8 @@ const db = {
         if (!this.data.ignoreKeywords) this.data.ignoreKeywords = [];
         if (!this.data.dateFormat) this.data.dateFormat = 'YYYY-MM-DD';
         if (!this.data.retryQueue) this.data.retryQueue = [];
+        if (!this.data.auth) this.data.auth = { useCookies: false };
+        if (typeof this.data.auth.useCookies !== "boolean") this.data.auth.useCookies = false;
         
         // Migrate old format to new format
         if (this.data.currentDownload && !this.data.currentDownloads) {
@@ -77,7 +114,7 @@ const db = {
           this.write(); // Save the cleanup
         }
       } catch {
-        this.data = { channels: [], keywords: [], ignoreKeywords: [], history: [], currentDownloads: [], retryQueue: [], dateFormat: 'YYYY-MM-DD' };
+        this.data = { channels: [], keywords: [], ignoreKeywords: [], history: [], currentDownloads: [], retryQueue: [], dateFormat: 'YYYY-MM-DD', auth: { useCookies: false } };
         fs.writeFileSync(DB_PATH, JSON.stringify(this.data, null, 2));
       }
     }
@@ -108,6 +145,36 @@ function normalizeError(err) {
   const code = err?.code;
   const message = err?.message || String(err);
   return { statusCode, code, message };
+}
+
+function canUseCookies() {
+  try {
+    db.read();
+    const enabled = !!db.data?.auth?.useCookies;
+    if (!enabled) return false;
+    return fs.existsSync(YTDLP_COOKIES_PATH);
+  } catch {
+    return false;
+  }
+}
+
+function getYtDlpAuthArgs() {
+  if (!canUseCookies()) return [];
+  return ["--cookies", YTDLP_COOKIES_PATH];
+}
+
+function classifyYtDlpAuthFailure(text) {
+  const t = String(text || "").toLowerCase();
+  if (!t) return null;
+
+  // Members-only / private / login-required patterns
+  if (t.includes("private video") && t.includes("sign in")) return { kind: "auth_required", reason: "private_video" };
+  if (t.includes("this video is available to this channel's members")) return { kind: "auth_required", reason: "members_only" };
+  if (t.includes("join this channel") && t.includes("access")) return { kind: "auth_required", reason: "members_only" };
+  if (t.includes("sign in") && t.includes("you've been granted access")) return { kind: "auth_required", reason: "private_video" };
+  if (t.includes("confirm your age") || t.includes("age-restricted")) return { kind: "auth_required", reason: "age_restricted" };
+
+  return null;
 }
 
 function isFinalVideoFile(name) {
@@ -290,6 +357,7 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
   const proc = spawn(
     "yt-dlp",
     [
+      ...getYtDlpAuthArgs(),
       "--live-from-start",
       "--wait-for-video",
       "30",
@@ -398,6 +466,82 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
     const stderr = tracking.stderr || "";
     const folderState = inspectDownloadFolder(dir);
 
+    const authFailure = classifyYtDlpAuthFailure(stderr);
+    if (authFailure) {
+      const cookiesAvailable = canUseCookies();
+
+      db.read();
+      const existing = (db.data.retryQueue || []).find(
+        (j) => j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId
+      );
+      const attempts = (existing?.attempts || 0) + 1;
+
+      // If no cookies configured, block this job until cookies are provided.
+      // This prevents infinite retries for members-only/private videos.
+      if (!cookiesAvailable) {
+        upsertRetryJob(
+          {
+            channelId: downloadInfo.channel,
+            videoId: downloadInfo.videoId,
+            title: downloadInfo.title,
+            username: downloadInfo.username,
+            channelName: downloadInfo.channelName,
+            videoLink,
+            dir,
+          },
+          {
+            attempts,
+            lastError: `Auth required (${authFailure.reason}); provide cookies to download (exit ${code})`,
+            blockedUntilCookies: true,
+            blockedReason: authFailure.reason,
+            inProgress: false,
+            // Park it far in the future so it won't be considered due.
+            nextAttemptAt: "2999-01-01T00:00:00.000Z",
+          }
+        );
+
+        db.read();
+        db.data.history.push({
+          title: downloadInfo.title,
+          time: nowIso(),
+          status: "blocked",
+          reason: authFailure.reason,
+          videoId: downloadInfo.videoId,
+          channelId: downloadInfo.channel,
+        });
+        db.write();
+
+        console.warn(
+          `[Archived V] Blocking "${downloadInfo.title}" until cookies are configured (${authFailure.reason}).`
+        );
+        return;
+      }
+
+      // Cookies are configured but auth still failed: retry a few times, then stop.
+      if (attempts >= MAX_AUTH_FAILURE_ATTEMPTS) {
+        db.read();
+        db.data.retryQueue = (db.data.retryQueue || []).filter(
+          (j) => !(j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId)
+        );
+        db.data.history.push({
+          title: downloadInfo.title,
+          time: nowIso(),
+          status: "skipped",
+          reason: `auth_failed_${authFailure.reason}`,
+          videoId: downloadInfo.videoId,
+          channelId: downloadInfo.channel,
+        });
+        db.write();
+
+        console.warn(
+          `[Archived V] Skipping "${downloadInfo.title}" after ${attempts} auth failures (${authFailure.reason}).`
+        );
+        return;
+      }
+
+      // Continue to normal retry logic below (cookies might be temporarily invalid / network flakiness)
+    }
+
     // If we ended up with a usable merged file, treat it as success.
     if (folderState.kind === "complete") {
       cleanupIntermediateFiles(dir, downloadInfo.title);
@@ -440,6 +584,8 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
         attempts,
         lastError: `${retryReason} (exit ${code})`,
         nextAttemptAt: computeNextAttempt(attempts),
+        blockedUntilCookies: false,
+        blockedReason: "",
         inProgress: false,
       }
     );
@@ -705,7 +851,7 @@ function cleanupIntermediateFiles(dir, title) {
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "6mb" }));
 
 // Serve static files in production
 if (process.env.NODE_ENV === "production") {
@@ -721,6 +867,109 @@ app.get("/api/config", (req, res) => {
     ignoreKeywords: db.data.ignoreKeywords || [],
     dateFormat: db.data.dateFormat || 'YYYY-MM-DD'
   });
+});
+
+function unblockCookieBlockedJobs() {
+  db.read();
+  const jobs = db.data.retryQueue || [];
+  let changed = false;
+  const updated = jobs.map((j) => {
+    if (j?.blockedUntilCookies) {
+      changed = true;
+      return {
+        ...j,
+        blockedUntilCookies: false,
+        blockedReason: "",
+        inProgress: false,
+        nextAttemptAt: nowIso(),
+        updatedAt: nowIso(),
+      };
+    }
+    return j;
+  });
+  if (changed) {
+    db.data.retryQueue = updated;
+    db.write();
+  }
+  return changed;
+}
+
+// API: Cookies/auth settings (members-only videos)
+app.get("/api/auth", (req, res) => {
+  db.read();
+  const useCookies = !!db.data?.auth?.useCookies;
+  const cookiesFilePresent = fs.existsSync(YTDLP_COOKIES_PATH);
+  const blockedCount = (db.data.retryQueue || []).filter((j) => j?.blockedUntilCookies).length;
+  res.json({
+    useCookies,
+    cookiesFilePresent,
+    cookiesPathHint: path.basename(YTDLP_COOKIES_PATH),
+    blockedCount,
+  });
+});
+
+app.post("/api/auth", (req, res) => {
+  const { useCookies } = req.body || {};
+  if (typeof useCookies !== "boolean") {
+    return res.status(400).json({ error: "useCookies must be boolean" });
+  }
+
+  db.read();
+  if (!db.data.auth) db.data.auth = { useCookies: false };
+  db.data.auth.useCookies = useCookies;
+  db.write();
+
+  const cookiesFilePresent = fs.existsSync(YTDLP_COOKIES_PATH);
+  let unblocked = false;
+  if (useCookies && cookiesFilePresent) {
+    unblocked = unblockCookieBlockedJobs();
+  }
+
+  res.json({ ok: true, useCookies, cookiesFilePresent, unblocked });
+});
+
+app.put("/api/auth/cookies", (req, res) => {
+  const { cookiesText } = req.body || {};
+  if (typeof cookiesText !== "string" || cookiesText.trim().length === 0) {
+    return res.status(400).json({ error: "cookiesText is required" });
+  }
+  if (Buffer.byteLength(cookiesText, "utf8") > 5 * 1024 * 1024) {
+    return res.status(413).json({ error: "cookiesText too large" });
+  }
+
+  try {
+    const dir = path.dirname(YTDLP_COOKIES_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(YTDLP_COOKIES_PATH, cookiesText, { encoding: "utf8" });
+    try {
+      fs.chmodSync(YTDLP_COOKIES_PATH, 0o600);
+    } catch {}
+
+    db.read();
+    if (!db.data.auth) db.data.auth = { useCookies: false };
+    db.data.auth.useCookies = true;
+    db.write();
+
+    const unblocked = unblockCookieBlockedJobs();
+    res.json({ ok: true, cookiesFilePresent: true, useCookies: true, unblocked });
+  } catch (e) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
+});
+
+app.delete("/api/auth/cookies", (req, res) => {
+  try {
+    if (fs.existsSync(YTDLP_COOKIES_PATH)) {
+      fs.rmSync(YTDLP_COOKIES_PATH, { force: true });
+    }
+    db.read();
+    if (!db.data.auth) db.data.auth = { useCookies: false };
+    db.data.auth.useCookies = false;
+    db.write();
+    res.json({ ok: true, cookiesFilePresent: false, useCookies: false });
+  } catch (e) {
+    res.status(500).json({ error: e?.message || String(e) });
+  }
 });
 
 // API: Add channel
@@ -1115,6 +1364,14 @@ async function checkUpdates() {
         let alreadyDownloaded = false;
         let isCurrentlyDownloading = false;
         let resumeDir = null;
+
+        // If this video is blocked until cookies are provided, don't re-enqueue it each cycle.
+        db.read();
+        const existingJob = (db.data.retryQueue || []).find((j) => j.channelId === ch.id && j.videoId === videoId);
+        const cookiesAvailable = canUseCookies();
+        if (existingJob?.blockedUntilCookies && !cookiesAvailable) {
+          continue;
+        }
         
         // CHECK 1: Is this video currently being downloaded by an active process?
         for (const [downloadId, download] of activeDownloads.entries()) {
@@ -1230,7 +1487,7 @@ async function checkUpdates() {
 
 // Serve React app in production
 if (process.env.NODE_ENV === "production") {
-  app.use((req, res) => {
+  app.use(staticFsLimiter, (req, res) => {
     res.sendFile(path.join(__dirname, "..", "dist", "index.html"));
   });
 }

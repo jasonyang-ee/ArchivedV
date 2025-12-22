@@ -101,4 +101,35 @@ export const api = {
     });
     return res.json();
   },
+
+  // Auth / Cookies (members-only videos)
+  async getAuthStatus() {
+    const res = await fetch(`${API_BASE}/auth`);
+    return res.json();
+  },
+
+  async setUseCookies(useCookies) {
+    const res = await fetch(`${API_BASE}/auth`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ useCookies }),
+    });
+    return res.json();
+  },
+
+  async uploadCookies(cookiesText) {
+    const res = await fetch(`${API_BASE}/auth/cookies`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cookiesText }),
+    });
+    return res.json();
+  },
+
+  async clearCookies() {
+    const res = await fetch(`${API_BASE}/auth/cookies`, {
+      method: "DELETE",
+    });
+    return res.json();
+  },
 };

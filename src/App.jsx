@@ -4,6 +4,7 @@ import Header from "./components/Header";
 import ChannelList from "./components/ChannelList";
 import KeywordList from "./components/KeywordList";
 import IgnoreKeywordList from "./components/IgnoreKeywordList";
+import CookieSettings from "./components/CookieSettings";
 import StatusDisplay from "./components/StatusDisplay";
 import DownloadHistory from "./components/DownloadHistory";
 
@@ -218,6 +219,7 @@ function App() {
               onAddKeyword={handleAddIgnoreKeyword}
               onDeleteKeyword={handleDeleteIgnoreKeyword}
             />
+            <CookieSettings />
           </div>
 
           {/* Center - Download Status and History */}
