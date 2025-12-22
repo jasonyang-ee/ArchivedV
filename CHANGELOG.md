@@ -19,6 +19,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 
 
+## [1.4.3] - 2025-12-22
+
+### Added
+
+- Members-only/private video support via `cookies.txt` (UI + API + yt-dlp `--cookies` integration)
+- In-memory skip cache for auth-required videos when cookies are not configured (prevents repeated attempts without growing history)
+- CI: build and push a Docker `:test` image in the test workflow
+
+### Changed
+
+- Download execution is more resilient: background scheduling/queueing and watchdog logic to avoid missed downloads and stuck processes
+- Security hardening: proxy-aware, loopback-exempt rate limiting for expensive handlers
+
+### Fixed
+
+- Prevent download loop/hang caused by yt-dlp `--wait-for-video` on private/members-only videos (detect early and stop)
+- Skip auth-required videos cleanly when cookies are not supplied
+- Fix “locked/freezing” behavior during update checks and long-running operations
+
+### Security
+
+- Apply rate limiting to filesystem-touching auth/cookies endpoints to satisfy CodeQL `js/missing-rate-limiting` without breaking localhost health checks/reverse proxy
+
 ## [1.4.2] - 2025-12-19
 
 ### Added
