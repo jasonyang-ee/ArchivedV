@@ -84,9 +84,8 @@ Some videos (members-only, private, age-restricted) cannot be downloaded by `yt-
 
 When this happens, ArchivedV will:
 
-- Stop retrying that video forever.
-- Mark it as **Blocked** in Download History.
-- Keep it in the retry queue as **blocked until cookies are provided**.
+- Skip that video when cookies are not configured (no history entry).
+- Avoid retrying it over and over during the same runtime.
 
 To enable downloading those videos, provide a YouTube `cookies.txt`:
 
@@ -98,7 +97,7 @@ To enable downloading those videos, provide a YouTube `cookies.txt`:
 	- Click **Save Cookies**
 	- Toggle **Enabled**
 
-After cookies are saved/enabled, any previously blocked jobs will be unblocked and retried.
+After cookies are saved/enabled, the service can download members-only/private videos.
 
 Security note: `cookies.txt` contains your account session. Only use this on a trusted machine.
 

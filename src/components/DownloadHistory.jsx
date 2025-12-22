@@ -51,13 +51,9 @@ function DownloadHistory({ history, onClearHistory }) {
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                     {formatDate(item.time)}
                   </p>
-                  {item.status && (
+                  {item.status === "skipped" && (
                     <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                      {item.status === "blocked"
-                        ? `Blocked: ${item.reason || "auth required"}`
-                        : item.status === "skipped"
-                          ? `Skipped: ${item.reason || ""}`
-                          : item.status}
+                      Skipped: {item.reason || ""}
                     </p>
                   )}
                 </div>

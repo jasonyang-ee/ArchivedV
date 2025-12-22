@@ -24,6 +24,33 @@ const DEFAULT_COOKIES_PATH = path.join(__dirname, "..", "data", "youtube_cookies
 const YTDLP_COOKIES_PATH = process.env.YTDLP_COOKIES_PATH || DEFAULT_COOKIES_PATH;
 const MAX_AUTH_FAILURE_ATTEMPTS = Number(process.env.MAX_AUTH_FAILURE_ATTEMPTS) || 3;
 
+// In-memory cache to avoid repeatedly attempting auth-required videos when cookies are not configured.
+// Not persisted (avoids history growth). TTL is configurable.
+const AUTH_SKIP_TTL_MS = Number(process.env.AUTH_SKIP_TTL_MS) || 7 * 24 * 60 * 60 * 1000;
+const AUTH_SKIP_CACHE_MAX = Number(process.env.AUTH_SKIP_CACHE_MAX) || 2000;
+const authSkipCache = new Map(); // videoId -> { expiresAt: number }
+
+function isAuthSkipped(videoId) {
+  if (!videoId) return false;
+  const entry = authSkipCache.get(videoId);
+  if (!entry) return false;
+  if (entry.expiresAt <= Date.now()) {
+    authSkipCache.delete(videoId);
+    return false;
+  }
+  return true;
+}
+
+function markAuthSkipped(videoId) {
+  if (!videoId) return;
+  // Simple size cap: drop oldest-ish by iterating insertion order.
+  if (authSkipCache.size >= AUTH_SKIP_CACHE_MAX) {
+    const firstKey = authSkipCache.keys().next().value;
+    if (firstKey) authSkipCache.delete(firstKey);
+  }
+  authSkipCache.set(videoId, { expiresAt: Date.now() + AUTH_SKIP_TTL_MS });
+}
+
 // Reverse proxy support (Caddy, nginx, etc.)
 // Set TRUST_PROXY=1 (or true) when behind a reverse proxy so req.ip reflects the real client IP
 const TRUST_PROXY_RAW = process.env.TRUST_PROXY;
@@ -476,43 +503,19 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
       );
       const attempts = (existing?.attempts || 0) + 1;
 
-      // If no cookies configured, block this job until cookies are provided.
-      // This prevents infinite retries for members-only/private videos.
+      // If no cookies configured, skip this video without tracking it in history.
+      // Also remove any retry job to prevent scheduler churn. A small in-memory cache
+      // prevents re-attempting the same video every scan cycle.
       if (!cookiesAvailable) {
-        upsertRetryJob(
-          {
-            channelId: downloadInfo.channel,
-            videoId: downloadInfo.videoId,
-            title: downloadInfo.title,
-            username: downloadInfo.username,
-            channelName: downloadInfo.channelName,
-            videoLink,
-            dir,
-          },
-          {
-            attempts,
-            lastError: `Auth required (${authFailure.reason}); provide cookies to download (exit ${code})`,
-            blockedUntilCookies: true,
-            blockedReason: authFailure.reason,
-            inProgress: false,
-            // Park it far in the future so it won't be considered due.
-            nextAttemptAt: "2999-01-01T00:00:00.000Z",
-          }
-        );
-
         db.read();
-        db.data.history.push({
-          title: downloadInfo.title,
-          time: nowIso(),
-          status: "blocked",
-          reason: authFailure.reason,
-          videoId: downloadInfo.videoId,
-          channelId: downloadInfo.channel,
-        });
+        db.data.retryQueue = (db.data.retryQueue || []).filter(
+          (j) => !(j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId)
+        );
         db.write();
 
+        markAuthSkipped(downloadInfo.videoId);
         console.warn(
-          `[Archived V] Blocking "${downloadInfo.title}" until cookies are configured (${authFailure.reason}).`
+          `[Archived V] Skipping auth-required video "${downloadInfo.title}" (no cookies; ${authFailure.reason}).`
         );
         return;
       }
@@ -584,8 +587,6 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
         attempts,
         lastError: `${retryReason} (exit ${code})`,
         nextAttemptAt: computeNextAttempt(attempts),
-        blockedUntilCookies: false,
-        blockedReason: "",
         inProgress: false,
       }
     );
@@ -869,42 +870,15 @@ app.get("/api/config", (req, res) => {
   });
 });
 
-function unblockCookieBlockedJobs() {
-  db.read();
-  const jobs = db.data.retryQueue || [];
-  let changed = false;
-  const updated = jobs.map((j) => {
-    if (j?.blockedUntilCookies) {
-      changed = true;
-      return {
-        ...j,
-        blockedUntilCookies: false,
-        blockedReason: "",
-        inProgress: false,
-        nextAttemptAt: nowIso(),
-        updatedAt: nowIso(),
-      };
-    }
-    return j;
-  });
-  if (changed) {
-    db.data.retryQueue = updated;
-    db.write();
-  }
-  return changed;
-}
-
 // API: Cookies/auth settings (members-only videos)
 app.get("/api/auth", (req, res) => {
   db.read();
   const useCookies = !!db.data?.auth?.useCookies;
   const cookiesFilePresent = fs.existsSync(YTDLP_COOKIES_PATH);
-  const blockedCount = (db.data.retryQueue || []).filter((j) => j?.blockedUntilCookies).length;
   res.json({
     useCookies,
     cookiesFilePresent,
     cookiesPathHint: path.basename(YTDLP_COOKIES_PATH),
-    blockedCount,
   });
 });
 
@@ -920,12 +894,10 @@ app.post("/api/auth", (req, res) => {
   db.write();
 
   const cookiesFilePresent = fs.existsSync(YTDLP_COOKIES_PATH);
-  let unblocked = false;
-  if (useCookies && cookiesFilePresent) {
-    unblocked = unblockCookieBlockedJobs();
-  }
+  // If cookies are enabled, allow previously skipped IDs to be retried.
+  if (useCookies && cookiesFilePresent) authSkipCache.clear();
 
-  res.json({ ok: true, useCookies, cookiesFilePresent, unblocked });
+  res.json({ ok: true, useCookies, cookiesFilePresent });
 });
 
 app.put("/api/auth/cookies", (req, res) => {
@@ -950,8 +922,8 @@ app.put("/api/auth/cookies", (req, res) => {
     db.data.auth.useCookies = true;
     db.write();
 
-    const unblocked = unblockCookieBlockedJobs();
-    res.json({ ok: true, cookiesFilePresent: true, useCookies: true, unblocked });
+    authSkipCache.clear();
+    res.json({ ok: true, cookiesFilePresent: true, useCookies: true });
   } catch (e) {
     res.status(500).json({ error: e?.message || String(e) });
   }
@@ -1365,11 +1337,9 @@ async function checkUpdates() {
         let isCurrentlyDownloading = false;
         let resumeDir = null;
 
-        // If this video is blocked until cookies are provided, don't re-enqueue it each cycle.
-        db.read();
-        const existingJob = (db.data.retryQueue || []).find((j) => j.channelId === ch.id && j.videoId === videoId);
-        const cookiesAvailable = canUseCookies();
-        if (existingJob?.blockedUntilCookies && !cookiesAvailable) {
+        // If cookies aren't configured and we've already seen an auth-required failure for this video,
+        // skip it to avoid repeatedly attempting it every scan.
+        if (!canUseCookies() && isAuthSkipped(videoId)) {
           continue;
         }
         

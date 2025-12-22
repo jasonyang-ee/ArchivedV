@@ -88,11 +88,6 @@ function CookieSettings() {
             Cookies file: {status.cookiesFilePresent ? "Present" : "Not found"}
             {status.cookiesPathHint ? ` (${status.cookiesPathHint})` : ""}
           </div>
-          {typeof status.blockedCount === "number" && status.blockedCount > 0 && (
-            <div className="text-gray-600 dark:text-gray-400 mt-1">
-              Blocked downloads waiting for cookies: {status.blockedCount}
-            </div>
-          )}
         </div>
       )}
 
