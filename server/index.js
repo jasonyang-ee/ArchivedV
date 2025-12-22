@@ -428,6 +428,7 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
     lastOutputAt: Date.now(),
     stderr: "",
     killedByWatchdog: false,
+    killedByAuthSkip: false,
   };
 
   activeDownloads.set(downloadId, tracking);
@@ -450,12 +451,38 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
       .split(/\r?\n/)
       .forEach((line) => {
         if (line) console.warn(`[yt-dlp] ${line}`);
+
+        // If yt-dlp reports a login/members-only requirement, it may keep looping due to --wait-for-video.
+        // Detect early and stop immediately when cookies aren't configured.
+        if (!tracking.killedByAuthSkip && line) {
+          const authFailure = classifyYtDlpAuthFailure(line);
+          if (authFailure && !canUseCookies()) {
+            tracking.killedByAuthSkip = true;
+
+            try {
+              db.read();
+              db.data.retryQueue = (db.data.retryQueue || []).filter(
+                (j) => !(j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId)
+              );
+              db.write();
+            } catch {}
+
+            markAuthSkipped(downloadInfo.videoId);
+            console.warn(
+              `[Archived V] Stopping yt-dlp for auth-required video "${downloadInfo.title}" (no cookies; ${authFailure.reason}).`
+            );
+
+            try {
+              proc.kill("SIGTERM");
+            } catch {}
+          }
+        }
       });
   });
 
   proc.on("close", (code) => {
     // If watchdog already handled requeue, don't double-count attempts.
-    if (tracking.killedByWatchdog) {
+    if (tracking.killedByWatchdog || tracking.killedByAuthSkip) {
       activeDownloads.delete(downloadId);
 
       status.currentDownloads = status.currentDownloads.filter((d) => d.id !== downloadId);
