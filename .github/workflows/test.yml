@@ -30,9 +30,9 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: false
+          push: true
           load: true
-          tags: archivedv:test
+          tags: ${{ secrets.USERNAME_DOCKERHUB }}/archivedv:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -42,7 +42,7 @@ jobs:
             --name archivedv-test \
             -p 3000:3000 \
             -e NODE_ENV=production \
-            archivedv:test
+            ${{ secrets.USERNAME_DOCKERHUB }}/archivedv:test
 
       - name: Wait for container to be ready
         run: |
