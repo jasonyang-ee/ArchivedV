@@ -81,6 +81,16 @@ const staticFsLimiter = rateLimit({
   skip: (req) => isLoopbackIp(req.ip),
 });
 
+// Rate limit endpoints that touch filesystem / sensitive auth state.
+// Skip loopback so local UI access and health checks aren't impacted.
+const authFsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: Number(process.env.AUTH_RATELIMIT_MAX) || 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => isLoopbackIp(req.ip),
+});
+
 const MAX_CONCURRENT_DOWNLOADS = Number(process.env.MAX_CONCURRENT_DOWNLOADS) || 0; // 0 = unlimited
 const FEED_FETCH_RETRIES = Number(process.env.FEED_FETCH_RETRIES) || 3;
 const FEED_FETCH_BACKOFF_MS = Number(process.env.FEED_FETCH_BACKOFF_MS) || 1000;
@@ -898,7 +908,7 @@ app.get("/api/config", (req, res) => {
 });
 
 // API: Cookies/auth settings (members-only videos)
-app.get("/api/auth", (req, res) => {
+app.get("/api/auth", authFsLimiter, (req, res) => {
   db.read();
   const useCookies = !!db.data?.auth?.useCookies;
   const cookiesFilePresent = fs.existsSync(YTDLP_COOKIES_PATH);
@@ -909,7 +919,7 @@ app.get("/api/auth", (req, res) => {
   });
 });
 
-app.post("/api/auth", (req, res) => {
+app.post("/api/auth", authFsLimiter, (req, res) => {
   const { useCookies } = req.body || {};
   if (typeof useCookies !== "boolean") {
     return res.status(400).json({ error: "useCookies must be boolean" });
@@ -927,7 +937,7 @@ app.post("/api/auth", (req, res) => {
   res.json({ ok: true, useCookies, cookiesFilePresent });
 });
 
-app.put("/api/auth/cookies", (req, res) => {
+app.put("/api/auth/cookies", authFsLimiter, (req, res) => {
   const { cookiesText } = req.body || {};
   if (typeof cookiesText !== "string" || cookiesText.trim().length === 0) {
     return res.status(400).json({ error: "cookiesText is required" });
@@ -956,7 +966,7 @@ app.put("/api/auth/cookies", (req, res) => {
   }
 });
 
-app.delete("/api/auth/cookies", (req, res) => {
+app.delete("/api/auth/cookies", authFsLimiter, (req, res) => {
   try {
     if (fs.existsSync(YTDLP_COOKIES_PATH)) {
       fs.rmSync(YTDLP_COOKIES_PATH, { force: true });
