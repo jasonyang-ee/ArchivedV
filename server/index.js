@@ -855,15 +855,27 @@ function cleanupIntermediateFiles(dir, title) {
     if (!fs.existsSync(dir)) return;
     
     const files = fs.readdirSync(dir);
-    
-    // Remove intermediate fragment files (.f123.mp4)
-    const fragmentFiles = files.filter(f => /^\.f\d+\.mp4$/i.test(f));
-    fragmentFiles.forEach(f => {
+
+    // Remove intermediate fragment files left by yt-dlp during live downloads.
+    // Examples:
+    // - <title>.f140.mp4
+    // - <title>.f140.mp4.part-Frag7
+    // - .f140.mp4 (older pattern)
+    const fragmentFiles = files.filter((f) => {
+      if (/\.part-frag\d+$/i.test(f)) return true;
+      if (/^\.f\d+\.(mp4|mkv|webm|m4a|aac)$/i.test(f)) return true;
+      if (/\.f\d+\.(mp4|mkv|webm|m4a|aac)$/i.test(f)) return true;
+      if (/\.f\d+\.(mp4|mkv|webm|m4a|aac)\.part-frag\d+$/i.test(f)) return true;
+      return false;
+    });
+
+    let removedFragments = 0;
+    fragmentFiles.forEach((f) => {
       try {
         fs.unlinkSync(path.join(dir, f));
-        console.log(`[Archived V] Cleaned up intermediate fragment: ${f}`);
+        removedFragments += 1;
       } catch (e) {
-        console.warn(`[Archived V] Failed to remove intermediate file ${f}: ${e.message}`);
+        console.warn(`[Archived V] Failed to remove fragment ${f}: ${e.message}`);
       }
     });
     
@@ -881,7 +893,7 @@ function cleanupIntermediateFiles(dir, title) {
       }
     }
     
-    console.log(`[Archived V] Cleanup completed for "${title}" - removed ${fragmentFiles.length} fragments`);
+    console.log(`[Archived V] Cleanup completed for "${title}" - removed ${removedFragments} fragment file(s)`);
   } catch (e) {
     console.error(`[Archived V] Error during intermediate file cleanup: ${e.message}`);
   }

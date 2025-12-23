@@ -7,17 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- 
-
-### Changed
-
-- 
-
 ### Fixed
 
-- 
+- Delete leftover yt-dlp live fragment files (`*.part-Frag*`, `*.f###.*`) after a successful merge to the final `.mp4`
 
 ## [1.4.3] - 2025-12-22
 
