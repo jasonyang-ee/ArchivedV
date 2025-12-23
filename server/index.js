@@ -52,8 +52,8 @@ function markAuthSkipped(videoId) {
 }
 
 // Reverse proxy support (Caddy, nginx, etc.)
-// Set TRUST_PROXY=1 (or true) when behind a reverse proxy so req.ip reflects the real client IP
-// Default to true to support common reverse proxy deployments and prevent express-rate-limit errors
+// Set TRUST_PROXY=1 when behind a reverse proxy so req.ip reflects the real client IP
+// Default to 1 (trust first proxy only) for security while supporting common Docker reverse proxy deployments
 const TRUST_PROXY_RAW = process.env.TRUST_PROXY;
 if (TRUST_PROXY_RAW !== undefined) {
   const lowered = String(TRUST_PROXY_RAW).toLowerCase();
@@ -62,11 +62,11 @@ if (TRUST_PROXY_RAW !== undefined) {
   else {
     const asNumber = Number(TRUST_PROXY_RAW);
     if (!Number.isNaN(asNumber)) app.set("trust proxy", asNumber);
-    else app.set("trust proxy", true);
+    else app.set("trust proxy", 1);
   }
 } else {
-  // Default to true when not explicitly set to prevent X-Forwarded-For validation errors
-  app.set("trust proxy", true);
+  // Default to 1 (trust only first/immediate proxy) for security in Docker deployments
+  app.set("trust proxy", 1);
 }
 
 function isLoopbackIp(ip) {
@@ -83,6 +83,7 @@ const staticFsLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => isLoopbackIp(req.ip),
+  validate: { trustProxy: false }, // Suppress validation warnings - we control the proxy setup
 });
 
 // Rate limit endpoints that touch filesystem / sensitive auth state.
@@ -93,6 +94,7 @@ const authFsLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => isLoopbackIp(req.ip),
+  validate: { trustProxy: false }, // Suppress validation warnings - we control the proxy setup
 });
 
 const MAX_CONCURRENT_DOWNLOADS = Number(process.env.MAX_CONCURRENT_DOWNLOADS) || 0; // 0 = unlimited

@@ -63,7 +63,7 @@ services:
       TZ: America/Los_Angeles
       # PUSHOVER_APP_TOKEN: ${PUSHOVER_APP_TOKEN}
       # PUSHOVER_USER_TOKEN: ${PUSHOVER_USER_TOKEN}
-	  # TRUST_PROXY: "false"                                         Optional: Default is true. Set to false if NOT behind a reverse proxy
+	  # TRUST_PROXY: "1"                                             Optional: Default is 1 (trust first proxy). Set to "false" if exposed directly to internet
 	# sysctls:                                                       Optional: Force disable ipv6 if you have issues with it
 	#   - net.ipv6.conf.all.disable_ipv6=1
 ```
