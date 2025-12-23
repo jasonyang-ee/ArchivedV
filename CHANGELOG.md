@@ -13,6 +13,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- 
+
+### Fixed
+
+- 
+
+## [1.4.5] - 2025-12-23
+
+### Added
+
+- 
+
+### Changed
+
 - Default `trust proxy` setting to `1` (trust first proxy only) for better security in Docker reverse proxy deployments
 
 ### Fixed
