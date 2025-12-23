@@ -13,11 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- 
+- Default `trust proxy` setting to `true` to support common reverse proxy deployments
 
 ### Fixed
 
-- 
+- Fixed express-rate-limit `ERR_ERL_UNEXPECTED_X_FORWARDED_FOR` error when deployed behind reverse proxies by defaulting trust proxy to enabled
 
 ## [1.4.4] - 2025-12-23
 

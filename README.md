@@ -1,6 +1,3 @@
-[![Test](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/test.yml/badge.svg)](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/test.yml)
-[![Release](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/release.yml/badge.svg)](https://github.com/jasonyang-ee/ArchivedV/actions/workflows/release.yml)
-
 
 <h1 align="center">(Un)Archived V</h1>
 <h3 align="center">Youtube Stream Download Service With Keyword Filtering.</h3>
@@ -61,21 +58,14 @@ services:
     volumes:
       - ./archivedv/data:/app/data
       - ./archivedv/video:/app/download
+	#   - ./archivedv/cookies.txt:/app/data/youtube_cookies.txt:ro   Optional: If you want to manage cookies as a separate file on the host,
     environment:
       TZ: America/Los_Angeles
       # PUSHOVER_APP_TOKEN: ${PUSHOVER_APP_TOKEN}
       # PUSHOVER_USER_TOKEN: ${PUSHOVER_USER_TOKEN}
-
-		# Optional: set a custom cookies path inside the container.
-		# If you don't set this, the app uses /app/data/youtube_cookies.txt
-		# YTDLP_COOKIES_PATH: /app/data/youtube_cookies.txt
-
-	 # Optional: if you want to manage cookies as a separate file on the host,
-	 # mount it into the container and point YTDLP_COOKIES_PATH at it.
-	 # volumes:
-	 #   - ./archivedv/data:/app/data
-	 #   - ./archivedv/video:/app/download
-	 #   - ./archivedv/youtube_cookies.txt:/app/data/youtube_cookies.txt:ro
+	  # TRUST_PROXY: "false"                                         Optional: Default is true. Set to false if NOT behind a reverse proxy
+	# sysctls:                                                       Optional: Force disable ipv6 if you have issues with it
+	#   - net.ipv6.conf.all.disable_ipv6=1
 ```
 
 ## Members-only / Private Videos (Cookies)
@@ -111,6 +101,7 @@ Bind mounts to preserve data:
 
 - **Configurations**: `/app/data/db.json`
 - **Downloaded Videos**: `/app/download/<channel_username>/[DateTime] <video_title>/`
+- **Cookies (optional)**: `/app/data/youtube_cookies.txt`
 
 ## Scheduling
 
@@ -137,25 +128,8 @@ Change to the user ID of your host system if necessary. You can do this by modif
 
 - Axios need ipv4 to work properly. Force ipv4 dns resolution by adding the following to your docker compose file:
 	```yaml
-	services:
-	  archivedv:
-	    image: jasonyangee/archivedv:latest
-	    container_name: archivedv
-	    restart: unless-stopped
-	    user: "1000:1000"
-	    ports:
-	    - "3000:3000"
-	    volumes:
-	    - ./archivedv/data:/app/data
-	    - ./archivedv/video:/app/download
-	    environment:
-	    TZ: America/Los_Angeles
-	    NODE_OPTIONS: "--dns-result-order=ipv4first"
-	    dns:
-	    - 8.8.8.8
-	    - 1.1.1.1
-	    sysctls:
-	    - net.ipv6.conf.all.disable_ipv6=1
+	sysctls:
+	- net.ipv6.conf.all.disable_ipv6=1
 	```
 
 

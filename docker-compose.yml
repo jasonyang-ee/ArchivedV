@@ -13,3 +13,4 @@ services:
       TZ: America/Los_Angeles
       # PUSHOVER_APP_TOKEN: ${PUSHOVER_APP_TOKEN}
       # PUSHOVER_USER_TOKEN: ${PUSHOVER_USER_TOKEN}
+      # TRUST_PROXY: "true"  # Default: true. Set to false if NOT behind a reverse proxy

@@ -53,6 +53,7 @@ function markAuthSkipped(videoId) {
 
 // Reverse proxy support (Caddy, nginx, etc.)
 // Set TRUST_PROXY=1 (or true) when behind a reverse proxy so req.ip reflects the real client IP
+// Default to true to support common reverse proxy deployments and prevent express-rate-limit errors
 const TRUST_PROXY_RAW = process.env.TRUST_PROXY;
 if (TRUST_PROXY_RAW !== undefined) {
   const lowered = String(TRUST_PROXY_RAW).toLowerCase();
@@ -63,6 +64,9 @@ if (TRUST_PROXY_RAW !== undefined) {
     if (!Number.isNaN(asNumber)) app.set("trust proxy", asNumber);
     else app.set("trust proxy", true);
   }
+} else {
+  // Default to true when not explicitly set to prevent X-Forwarded-For validation errors
+  app.set("trust proxy", true);
 }
 
 function isLoopbackIp(ip) {
