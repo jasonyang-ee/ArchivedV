@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- 
+
+### Changed
+
+- 
+
+### Fixed
+
+- 
+
+## [1.4.6] - 2025-12-23
+
+### Added
+
 - Dev container for VSCode development environment and some updated contribution guidelines
 
 ### Changed
