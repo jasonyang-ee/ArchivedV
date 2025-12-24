@@ -103,7 +103,7 @@ const FEED_FETCH_BACKOFF_MS = Number(process.env.FEED_FETCH_BACKOFF_MS) || 1000;
 const RETRY_BASE_DELAY_MS = Number(process.env.RETRY_BASE_DELAY_MS) || 2 * 60 * 1000;
 const RETRY_MAX_DELAY_MS = Number(process.env.RETRY_MAX_DELAY_MS) || 60 * 60 * 1000;
 const DOWNLOAD_WATCHDOG_INTERVAL_MS = Number(process.env.DOWNLOAD_WATCHDOG_INTERVAL_MS) || 60 * 1000;
-const DOWNLOAD_WATCHDOG_NO_OUTPUT_MS = Number(process.env.DOWNLOAD_WATCHDOG_NO_OUTPUT_MS) || 30 * 60 * 1000;
+const DOWNLOAD_WATCHDOG_NO_OUTPUT_MS = Number(process.env.DOWNLOAD_WATCHDOG_NO_OUTPUT_MS) || 2 * 60 * 60 * 1000; // 2 hours for live streams with network issues
 const DOWNLOAD_WATCHDOG_MIN_RUNTIME_MS = Number(process.env.DOWNLOAD_WATCHDOG_MIN_RUNTIME_MS) || 10 * 60 * 1000;
 
 // Directories

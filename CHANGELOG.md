@@ -9,15 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- 
+- Dev container for VSCode development environment and some updated contribution guidelines
 
 ### Changed
 
-- 
-
-### Fixed
-
-- 
+- Increasing watchdog timeout to 2 hours to better accommodate long live streams with intermittent network issues.
 
 ## [1.4.5] - 2025-12-23
 
@@ -32,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fixed express-rate-limit trust proxy validation warnings by properly configuring proxy trust levels and suppressing unnecessary validation checks
+- Increased watchdog no-output timeout from 30 minutes to 2 hours to prevent premature killing of live stream downloads during network retries
 
 ## [1.4.4] - 2025-12-23
 
