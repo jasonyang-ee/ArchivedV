@@ -1,10 +1,6 @@
 # Contributing
 
-I'm happy that you want to contribute to ArchivedV and help make it better! All contributions are welcome, including issues, suggestions, pull requests, and more.
-
-## Getting Started
-
-Found a bug, have a suggestion, or something else? Just create an issue on GitHub and we can get in touch.
+All contributions are welcome, including issues, suggestions, pull requests, and more.
 
 ## Submitting a Pull Request
 
@@ -24,7 +20,7 @@ Before you submit the pull request for review, please ensure that:
   Where `TYPE` can be:
   - **feat** - a new feature
   - **fix** - a bug fix
-  - **docs** - documentation only changes
+  - **doc** - documentation only changes
   - **refactor** - code change that neither fixes a bug nor adds a feature
   - **test** - adding or updating tests
   - **ci** - changes to CI/CD workflows
@@ -37,53 +33,45 @@ Before you submit the pull request for review, please ensure that:
 
 ## Development Environment
 
-ArchivedV is a web application for downloading and archiving videos using yt-dlp. It consists of a React frontend, Express.js backend, and runs in Docker.
+ArchivedV is a web application for downloading and archiving videos using yt-dlp. To set up a local development environment, follow these steps:
 
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/en/download/) >= 24
-- [Git](https://git-scm.com/downloads)
-- [Docker](https://www.docker.com/products/docker-desktop) (for testing the complete stack)
-- [Docker Buildx](https://github.com/docker/buildx) (for multi-platform builds)
+- [Docker](https://www.docker.com/products/docker-desktop) for testing the complete stack
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) installed on your system for local testing
 
 ### Setup
 
 1. Clone the repository:
    ```bash
    git clone https://github.com/jasonyang-ee/ArchivedV.git
+   ```
+   ```bash
    cd ArchivedV
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Create a `.env` file in the root directory (optional, for custom settings):
-   ```bash
-   # Add any environment variables as needed
    ```
 
 ### Running Locally
 
-**Start the backend server:**
-```bash
-npm start
-```
+- Start the server stack:
+	> Linux
+	```bash
+	./start.sh
+	```
+	> Windows
+	```bash
+	start.bat
+	```
 
-The backend will start on `http://localhost:3000`
+- The frontend will start on `http://localhost:5173`
+- The backend will start on `http://localhost:3000`
 
-**In another terminal, start the frontend (development mode):**
-```bash
-npm run dev
-```
+### Running with Docker
 
-The frontend will typically start on `http://localhost:5173` (Vite)
-
-Or run everything together with Docker:
-```bash
-docker-compose up
-```
+- Start the application using Docker Compose:
+	```bash
+	docker-compose up
+	```
 
 ### Building
 

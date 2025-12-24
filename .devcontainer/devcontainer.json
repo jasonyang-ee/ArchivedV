@@ -1,0 +1,26 @@
+{
+	"name": "ArchivedV Development",
+	"build": {
+		"dockerfile": "Dockerfile",
+		"context": ".."
+	},
+	"features": {},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-vscode.vscode-typescript-next",
+				"bradlc.vscode-tailwindcss",
+				"ms-vscode.vscode-json",
+				"esbenp.prettier-vscode"
+			]
+		}
+	},
+	"forwardPorts": [3000],
+	"mounts": [
+		"source=${localWorkspaceFolder}/data,target=/app/data,type=bind,consistency=cached",
+		"source=${localWorkspaceFolder}/download,target=/app/download,type=bind,consistency=cached"
+	],
+	"workspaceMount": "source=${localWorkspaceFolder},target=/app,type=bind,consistency=cached",
+	"workspaceFolder": "/app",
+	"shutdownAction": "stopContainer"
+}
