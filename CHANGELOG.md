@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - prevent yt-dlp from hanging on 403 retry loops when stream ends
+- reduce excessive feed 404 log spam
 
 ## [1.4.6] - 2025-12-23
 
