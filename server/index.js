@@ -1128,7 +1128,7 @@ async function processIncompleteDownload(dir, baseTitle, files) {
   // Check for final output file already existing
   const finalFile = relatedFiles.find(f => 
     f === `${baseTitle}.mp4` || f === `${baseTitle}.mkv` || f === `${baseTitle}.webm` ||
-    f.includes("[recovered]") || f.includes("[audio-only]")
+    f.includes("[recovered]")
   );
   
   if (finalFile) {
@@ -1137,26 +1137,65 @@ async function processIncompleteDownload(dir, baseTitle, files) {
     return "recovered";
   }
   
-  // Find main format files (NOT .part-Frag* files - those are incomplete fragments)
-  // Format files: title.f###.mp4 where ### is the format code
-  // Common formats: f140=audio(m4a), f251=audio(opus), f299/f303/f308=video
+  // Audio formats (these are audio-only streams)
+  const audioFormats = ["f140", "f251", "f250", "f249", "f139", "f171"];
+  
+  // Find complete format files (NOT .part files)
   const formatFiles = relatedFiles.filter(f => 
     /\.f\d+\.(mp4|mkv|webm|m4a)$/i.test(f) && !f.includes(".part")
   );
   
-  // Separate video and audio format files
-  // Audio formats: f140 (m4a 128kbps), f251 (opus), f250, f249
-  // Video formats: everything else (f299, f303, f308, f313, etc.)
-  const audioFormats = ["f140", "f251", "f250", "f249", "f139", "f171"];
+  // Find fragment files (.part-Frag*)
+  const fragmentFiles = relatedFiles.filter(f => /\.part-Frag\d+$/i.test(f));
   
-  const audioFiles = formatFiles.filter(f => 
-    audioFormats.some(fmt => f.includes(`.${fmt}.`))
+  // Group fragments by their format (e.g., .f299.mp4.part-Frag1 -> f299)
+  const fragmentsByFormat = {};
+  for (const frag of fragmentFiles) {
+    const match = frag.match(/\.(f\d+)\.(mp4|mkv|webm|m4a)\.part-Frag(\d+)$/i);
+    if (match) {
+      const formatCode = match[1].toLowerCase();
+      const fragNum = parseInt(match[3], 10);
+      if (!fragmentsByFormat[formatCode]) {
+        fragmentsByFormat[formatCode] = [];
+      }
+      fragmentsByFormat[formatCode].push({ file: frag, num: fragNum });
+    }
+  }
+  
+  // Sort fragments by number for each format
+  for (const fmt of Object.keys(fragmentsByFormat)) {
+    fragmentsByFormat[fmt].sort((a, b) => a.num - b.num);
+  }
+  
+  // Find video fragments (non-audio formats)
+  const videoFragmentFormats = Object.keys(fragmentsByFormat).filter(fmt => 
+    !audioFormats.includes(fmt)
   );
-  const videoFiles = formatFiles.filter(f => 
+  
+  // Find audio fragments
+  const audioFragmentFormats = Object.keys(fragmentsByFormat).filter(fmt => 
+    audioFormats.includes(fmt)
+  );
+  
+  // Get the best video format (most fragments = most data)
+  let bestVideoFormat = null;
+  let maxVideoFrags = 0;
+  for (const fmt of videoFragmentFormats) {
+    if (fragmentsByFormat[fmt].length > maxVideoFrags) {
+      maxVideoFrags = fragmentsByFormat[fmt].length;
+      bestVideoFormat = fmt;
+    }
+  }
+  
+  // Check for complete format files too
+  const completeVideoFiles = formatFiles.filter(f => 
     !audioFormats.some(fmt => f.includes(`.${fmt}.`))
   );
+  const completeAudioFiles = formatFiles.filter(f => 
+    audioFormats.some(fmt => f.includes(`.${fmt}.`))
+  );
   
-  // Get the largest audio and video files (most complete)
+  // Get largest complete files
   const getLargestFile = (fileList) => {
     let largest = null;
     let largestSize = 0;
@@ -1172,66 +1211,145 @@ async function processIncompleteDownload(dir, baseTitle, files) {
     return { file: largest, size: largestSize };
   };
   
-  const bestAudio = getLargestFile(audioFiles);
-  const bestVideo = getLargestFile(videoFiles);
+  const bestCompleteVideo = getLargestFile(completeVideoFiles);
+  const bestCompleteAudio = getLargestFile(completeAudioFiles);
   
-  console.log(`[Archived V] Found: video=${bestVideo.file ? `${bestVideo.file} (${Math.round(bestVideo.size/1024/1024)}MB)` : 'none'}, audio=${bestAudio.file ? `${bestAudio.file} (${Math.round(bestAudio.size/1024/1024)}MB)` : 'none'}`);
+  console.log(`[Archived V] Found: video=${bestVideoFormat ? `${maxVideoFrags} frags (${bestVideoFormat})` : 'none'}, complete_video=${bestCompleteVideo.file ? `${Math.round(bestCompleteVideo.size/1024/1024)}MB` : 'none'}, audio=${bestCompleteAudio.file ? `${Math.round(bestCompleteAudio.size/1024/1024)}MB` : 'none'}`);
   
-  // Minimum size thresholds (files smaller than this are likely corrupted/empty)
-  const MIN_VIDEO_SIZE = 100 * 1024;  // 100KB
-  const MIN_AUDIO_SIZE = 50 * 1024;   // 50KB
+  // Strategy:
+  // 1. If we have video fragments -> concatenate them into a video file
+  // 2. If we have complete audio -> merge with video
+  // 3. Always output .mp4 video file (not audio-only)
   
-  const hasVideo = bestVideo.file && bestVideo.size >= MIN_VIDEO_SIZE;
-  const hasAudio = bestAudio.file && bestAudio.size >= MIN_AUDIO_SIZE;
+  let videoPath = null;
+  let tempVideoCreated = false;
   
-  if (!hasVideo && !hasAudio) {
-    console.log(`[Archived V] No salvageable files (too small or missing) for "${baseTitle.substring(0, 50)}..."`);
+  // Try to create video from fragments
+  if (bestVideoFormat && maxVideoFrags >= 10) { // Need at least 10 fragments
+    console.log(`[Archived V] Concatenating ${maxVideoFrags} video fragments (${bestVideoFormat})...`);
+    const tempVideo = path.join(dir, `${baseTitle}.temp_video.mp4`);
+    const success = await concatenateFragments(dir, baseTitle, fragmentsByFormat[bestVideoFormat], tempVideo);
+    if (success) {
+      videoPath = tempVideo;
+      tempVideoCreated = true;
+    }
+  }
+  
+  // Fall back to complete video file if fragments didn't work
+  if (!videoPath && bestCompleteVideo.file && bestCompleteVideo.size > 100 * 1024) {
+    videoPath = path.join(dir, bestCompleteVideo.file);
+  }
+  
+  // Get audio path
+  let audioPath = null;
+  if (bestCompleteAudio.file && bestCompleteAudio.size > 50 * 1024) {
+    audioPath = path.join(dir, bestCompleteAudio.file);
+  }
+  
+  // If we still have no video, try to create from audio fragments (with video)
+  // This is a last resort - the audio file might actually contain video in some edge cases
+  
+  if (!videoPath && !audioPath) {
+    console.log(`[Archived V] No salvageable video or audio for "${baseTitle.substring(0, 50)}..."`);
     return "skipped";
   }
   
-  // Recovery strategy:
-  // 1. If we have both video and audio -> merge them
-  // 2. If we have only audio (common for music streams) -> save as audio file
-  // 3. If we have only video -> fix/remux it
+  // Create the recovered file
+  const outputFile = path.join(dir, `${baseTitle} [recovered].mp4`);
+  let recovered = false;
   
-  if (hasVideo && hasAudio) {
+  if (videoPath && audioPath) {
+    // Merge video + audio
     console.log(`[Archived V] Merging video + audio for "${baseTitle.substring(0, 50)}..."`);
-    const recovered = await mergeVideoAudio(dir, baseTitle, bestVideo.file, bestAudio.file);
-    if (recovered) {
-      cleanupFragmentsOnly(dir, baseTitle);
-      return "recovered";
-    }
-    // If merge failed, try saving them separately
-    console.log(`[Archived V] Merge failed, trying to save separately...`);
+    recovered = await mergeVideoAudio(dir, baseTitle, videoPath, audioPath, outputFile);
+  } else if (videoPath) {
+    // Video only - remux it
+    console.log(`[Archived V] Remuxing video for "${baseTitle.substring(0, 50)}..."`);
+    recovered = await remuxVideo(videoPath, outputFile);
+  } else if (audioPath) {
+    // Audio only - but still save as .mp4 (will be video container with audio track)
+    console.log(`[Archived V] Converting audio to video container for "${baseTitle.substring(0, 50)}..."`);
+    recovered = await audioToVideoContainer(audioPath, outputFile);
   }
   
-  if (hasAudio && !hasVideo) {
-    // Audio-only recovery (common for karaoke streams that got privated)
-    const recovered = await fixAndSaveAudio(dir, baseTitle, bestAudio.file, bestAudio.size);
-    if (recovered) {
-      cleanupFragmentsOnly(dir, baseTitle);
-      return "recovered";
-    }
+  // Cleanup temp video if created
+  if (tempVideoCreated && videoPath) {
+    try { fs.unlinkSync(videoPath); } catch {}
   }
   
-  if (hasVideo) {
-    // Video-only recovery
-    const recovered = await fixAndSaveVideo(dir, baseTitle, bestVideo.file, bestVideo.size);
-    if (recovered) {
-      cleanupFragmentsOnly(dir, baseTitle);
-      return "recovered";
-    }
+  if (recovered) {
+    cleanupFragmentsOnly(dir, baseTitle);
+    return "recovered";
   }
   
   return "failed";
 }
 
-// Merge video and audio streams using ffmpeg
-async function mergeVideoAudio(dir, baseTitle, videoFile, audioFile) {
-  const outputFile = path.join(dir, `${baseTitle} [recovered].mp4`);
-  const videoPath = path.join(dir, videoFile);
-  const audioPath = path.join(dir, audioFile);
+// Concatenate fragment files into a single video
+async function concatenateFragments(dir, baseTitle, fragments, outputPath) {
+  if (fragments.length === 0) return false;
   
+  // Create a concat list file
+  const listFile = path.join(dir, `${baseTitle}.concat_list.txt`);
+  const listContent = fragments.map(f => `file '${f.file.replace(/'/g, "'\\''")}'`).join('\n');
+  
+  try {
+    fs.writeFileSync(listFile, listContent);
+  } catch (e) {
+    console.error(`[Archived V] Failed to write concat list: ${e.message}`);
+    return false;
+  }
+  
+  return new Promise((resolve) => {
+    const ffmpeg = spawn("ffmpeg", [
+      "-y",
+      "-f", "concat",
+      "-safe", "0",
+      "-i", listFile,
+      "-c", "copy",
+      "-fflags", "+genpts+igndts",
+      "-movflags", "+faststart",
+      outputPath
+    ], { cwd: dir, stdio: ["pipe", "pipe", "pipe"] });
+    
+    let lastProgress = "";
+    ffmpeg.stderr.on("data", (data) => {
+      const text = data.toString();
+      const timeMatch = text.match(/time=(\d+:\d+:\d+)/);
+      if (timeMatch && timeMatch[1] !== lastProgress) {
+        lastProgress = timeMatch[1];
+      }
+    });
+    
+    ffmpeg.on("close", (code) => {
+      // Clean up list file
+      try { fs.unlinkSync(listFile); } catch {}
+      
+      if (code === 0 && fs.existsSync(outputPath)) {
+        const stats = fs.statSync(outputPath);
+        if (stats.size > 1024 * 1024) { // At least 1MB
+          console.log(`[Archived V] ✓ Concatenated ${fragments.length} fragments: ${Math.round(stats.size / 1024 / 1024)}MB`);
+          resolve(true);
+        } else {
+          try { fs.unlinkSync(outputPath); } catch {}
+          resolve(false);
+        }
+      } else {
+        console.warn(`[Archived V] ✗ Fragment concatenation failed (exit code ${code})`);
+        resolve(false);
+      }
+    });
+    
+    ffmpeg.on("error", (err) => {
+      try { fs.unlinkSync(listFile); } catch {}
+      console.error(`[Archived V] ffmpeg error: ${err.message}`);
+      resolve(false);
+    });
+  });
+}
+
+// Merge video and audio streams using ffmpeg
+async function mergeVideoAudio(dir, baseTitle, videoPath, audioPath, outputFile) {
   console.log(`[Archived V] Running ffmpeg merge...`);
   
   return new Promise((resolve) => {
@@ -1244,7 +1362,7 @@ async function mergeVideoAudio(dir, baseTitle, videoFile, audioFile) {
       "-err_detect", "ignore_err",
       "-i", audioPath,
       "-c:v", "copy",
-      "-c:a", "aac",  // Re-encode audio for better compatibility
+      "-c:a", "aac",
       "-b:a", "192k",
       "-movflags", "+faststart",
       "-max_muxing_queue_size", "9999",
@@ -1254,11 +1372,9 @@ async function mergeVideoAudio(dir, baseTitle, videoFile, audioFile) {
     let lastProgress = "";
     ffmpeg.stderr.on("data", (data) => {
       const text = data.toString();
-      // Extract progress info
       const timeMatch = text.match(/time=(\d+:\d+:\d+)/);
       if (timeMatch && timeMatch[1] !== lastProgress) {
         lastProgress = timeMatch[1];
-        // Log progress every few seconds worth of video
         console.log(`[Archived V] Merge progress: ${lastProgress}`);
       }
     });
@@ -1282,79 +1398,8 @@ async function mergeVideoAudio(dir, baseTitle, videoFile, audioFile) {
   });
 }
 
-// Fix and save audio file
-async function fixAndSaveAudio(dir, baseTitle, audioFile, size) {
-  const inputPath = path.join(dir, audioFile);
-  const outputFile = path.join(dir, `${baseTitle} [audio-only].m4a`);
-  
-  console.log(`[Archived V] Fixing audio file (${Math.round(size/1024/1024)}MB)...`);
-  
-  return new Promise((resolve) => {
-    const ffmpeg = spawn("ffmpeg", [
-      "-y",
-      "-fflags", "+genpts+igndts",
-      "-err_detect", "ignore_err",
-      "-i", inputPath,
-      "-c:a", "copy",  // Try copy first
-      "-movflags", "+faststart",
-      outputFile
-    ], { stdio: ["pipe", "pipe", "pipe"] });
-    
-    ffmpeg.on("close", (code) => {
-      if (code === 0 && fs.existsSync(outputFile)) {
-        const stats = fs.statSync(outputFile);
-        if (stats.size > 50 * 1024) { // At least 50KB
-          console.log(`[Archived V] ✓ Audio saved: ${Math.round(stats.size / 1024 / 1024)}MB`);
-          resolve(true);
-        } else {
-          try { fs.unlinkSync(outputFile); } catch {}
-          resolve(false);
-        }
-      } else {
-        // Try re-encoding if copy failed
-        console.log(`[Archived V] Copy failed, trying re-encode...`);
-        const ffmpeg2 = spawn("ffmpeg", [
-          "-y",
-          "-fflags", "+genpts+igndts",
-          "-err_detect", "ignore_err",
-          "-i", inputPath,
-          "-c:a", "aac",
-          "-b:a", "192k",
-          "-movflags", "+faststart",
-          outputFile
-        ], { stdio: ["pipe", "pipe", "pipe"] });
-        
-        ffmpeg2.on("close", (code2) => {
-          if (code2 === 0 && fs.existsSync(outputFile)) {
-            const stats = fs.statSync(outputFile);
-            if (stats.size > 50 * 1024) {
-              console.log(`[Archived V] ✓ Audio re-encoded: ${Math.round(stats.size / 1024 / 1024)}MB`);
-              resolve(true);
-            } else {
-              try { fs.unlinkSync(outputFile); } catch {}
-              resolve(false);
-            }
-          } else {
-            console.warn(`[Archived V] ✗ Audio recovery failed`);
-            resolve(false);
-          }
-        });
-        
-        ffmpeg2.on("error", () => resolve(false));
-      }
-    });
-    
-    ffmpeg.on("error", () => resolve(false));
-  });
-}
-
-// Fix and save video file
-async function fixAndSaveVideo(dir, baseTitle, videoFile, size) {
-  const inputPath = path.join(dir, videoFile);
-  const outputFile = path.join(dir, `${baseTitle} [recovered].mp4`);
-  
-  console.log(`[Archived V] Fixing video file (${Math.round(size/1024/1024)}MB)...`);
-  
+// Remux video file
+async function remuxVideo(inputPath, outputFile) {
   return new Promise((resolve) => {
     const ffmpeg = spawn("ffmpeg", [
       "-y",
@@ -1370,15 +1415,66 @@ async function fixAndSaveVideo(dir, baseTitle, videoFile, size) {
     ffmpeg.on("close", (code) => {
       if (code === 0 && fs.existsSync(outputFile)) {
         const stats = fs.statSync(outputFile);
-        if (stats.size > 100 * 1024) { // At least 100KB
-          console.log(`[Archived V] ✓ Video saved: ${Math.round(stats.size / 1024 / 1024)}MB`);
+        if (stats.size > 100 * 1024) {
+          console.log(`[Archived V] ✓ Video remuxed: ${Math.round(stats.size / 1024 / 1024)}MB`);
           resolve(true);
         } else {
           try { fs.unlinkSync(outputFile); } catch {}
           resolve(false);
         }
       } else {
-        console.warn(`[Archived V] ✗ Video recovery failed`);
+        console.warn(`[Archived V] ✗ Video remux failed`);
+        resolve(false);
+      }
+    });
+    
+    ffmpeg.on("error", () => resolve(false));
+  });
+}
+
+// Convert audio to video container (.mp4)
+async function audioToVideoContainer(audioPath, outputFile) {
+  return new Promise((resolve) => {
+    // Use a black video with the audio - this creates a proper video file
+    const ffmpeg = spawn("ffmpeg", [
+      "-y",
+      "-f", "lavfi",
+      "-i", "color=c=black:s=1920x1080:r=1",  // Black video, 1fps to save space
+      "-fflags", "+genpts+igndts",
+      "-err_detect", "ignore_err",
+      "-i", audioPath,
+      "-c:v", "libx264",
+      "-preset", "ultrafast",
+      "-tune", "stillimage",
+      "-c:a", "aac",
+      "-b:a", "192k",
+      "-shortest",
+      "-movflags", "+faststart",
+      outputFile
+    ], { stdio: ["pipe", "pipe", "pipe"] });
+    
+    let lastProgress = "";
+    ffmpeg.stderr.on("data", (data) => {
+      const text = data.toString();
+      const timeMatch = text.match(/time=(\d+:\d+:\d+)/);
+      if (timeMatch && timeMatch[1] !== lastProgress) {
+        lastProgress = timeMatch[1];
+        console.log(`[Archived V] Audio→Video progress: ${lastProgress}`);
+      }
+    });
+    
+    ffmpeg.on("close", (code) => {
+      if (code === 0 && fs.existsSync(outputFile)) {
+        const stats = fs.statSync(outputFile);
+        if (stats.size > 50 * 1024) {
+          console.log(`[Archived V] ✓ Audio converted to video: ${Math.round(stats.size / 1024 / 1024)}MB`);
+          resolve(true);
+        } else {
+          try { fs.unlinkSync(outputFile); } catch {}
+          resolve(false);
+        }
+      } else {
+        console.warn(`[Archived V] ✗ Audio to video conversion failed`);
         resolve(false);
       }
     });
