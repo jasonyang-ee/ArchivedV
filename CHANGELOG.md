@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 
 
+## [1.4.7] - 2025-12-25
+
+### Fixed
+
+- prevent yt-dlp from hanging on 403 retry loops when stream ends
+
 ## [1.4.6] - 2025-12-23
 
 ### Added
