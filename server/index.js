@@ -991,17 +991,37 @@ async function recoverIncompleteDownloads() {
 
   console.log("[Archived V] Scanning for incomplete downloads to recover...");
   
-  const channelDirs = fs.readdirSync(DOWNLOAD_DIR, { withFileTypes: true })
-    .filter(d => d.isDirectory())
-    .map(d => path.join(DOWNLOAD_DIR, d.name));
+  // Recursively find all directories that might contain incomplete downloads
+  function getAllDirs(dir, results = []) {
+    if (!fs.existsSync(dir)) return results;
+    results.push(dir);
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          getAllDirs(path.join(dir, entry.name), results);
+        }
+      }
+    } catch {}
+    return results;
+  }
+  
+  const allDirs = getAllDirs(DOWNLOAD_DIR);
+  console.log(`[Archived V] Scanning ${allDirs.length} directories for fragments...`);
 
   let recoveredCount = 0;
   let failedCount = 0;
+  const processedTitles = new Set(); // Avoid processing same title twice
 
-  for (const channelDir of channelDirs) {
-    const files = fs.readdirSync(channelDir);
+  for (const dir of allDirs) {
+    let files;
+    try {
+      files = fs.readdirSync(dir);
+    } catch {
+      continue;
+    }
     
-    // Find .ytdl state files (indicates incomplete download)
+    // Method 1: Find .ytdl state files (indicates incomplete download)
     const ytdlFiles = files.filter(f => f.endsWith(".ytdl"));
     
     for (const ytdlFile of ytdlFiles) {
@@ -1010,48 +1030,59 @@ async function recoverIncompleteDownloads() {
       if (!match) continue;
       
       const baseTitle = match[1];
-      console.log(`[Archived V] Found incomplete download: "${baseTitle}"`);
+      const titleKey = `${dir}:${baseTitle}`;
+      if (processedTitles.has(titleKey)) continue;
+      processedTitles.add(titleKey);
       
-      // Find related fragment files
-      const relatedFiles = files.filter(f => f.startsWith(baseTitle));
+      console.log(`[Archived V] Found incomplete download (ytdl): "${baseTitle}" in ${path.basename(dir)}`);
       
-      // Look for partial video file (.part-Frag* or just the format file)
-      const videoPartial = relatedFiles.find(f => 
-        /\.f\d+\.(mp4|mkv|webm)\.part-Frag\d+$/i.test(f) ||
-        /\.f\d+\.(mp4|mkv|webm)$/i.test(f)
+      const result = await processIncompleteDownload(dir, baseTitle, files);
+      if (result === "recovered") recoveredCount++;
+      else if (result === "failed") failedCount++;
+    }
+    
+    // Method 2: Find orphaned .part-Frag* files without .ytdl
+    const fragFiles = files.filter(f => /\.part-Frag\d+$/i.test(f));
+    for (const fragFile of fragFiles) {
+      // Extract base title: "title.f299.mp4.part-Frag123" -> "title"
+      const match = fragFile.match(/^(.+)\.f\d+\.(mp4|mkv|webm|m4a)\.part-Frag\d+$/i);
+      if (!match) continue;
+      
+      const baseTitle = match[1];
+      const titleKey = `${dir}:${baseTitle}`;
+      if (processedTitles.has(titleKey)) continue;
+      processedTitles.add(titleKey);
+      
+      console.log(`[Archived V] Found incomplete download (frag): "${baseTitle}" in ${path.basename(dir)}`);
+      
+      const result = await processIncompleteDownload(dir, baseTitle, files);
+      if (result === "recovered") recoveredCount++;
+      else if (result === "failed") failedCount++;
+    }
+    
+    // Method 3: Find orphaned format files (.f140.mp4, .f299.mp4) without final output
+    const formatFiles = files.filter(f => /\.f\d+\.(mp4|mkv|webm|m4a)$/i.test(f) && !f.includes("[recovered]"));
+    for (const formatFile of formatFiles) {
+      const match = formatFile.match(/^(.+)\.f\d+\.(mp4|mkv|webm|m4a)$/i);
+      if (!match) continue;
+      
+      const baseTitle = match[1];
+      const titleKey = `${dir}:${baseTitle}`;
+      if (processedTitles.has(titleKey)) continue;
+      
+      // Check if final file exists
+      const hasFinal = files.some(f => 
+        f === `${baseTitle}.mp4` || f === `${baseTitle}.mkv` || f === `${baseTitle}.webm` ||
+        f.startsWith(baseTitle) && (f.includes("[recovered]") || f.includes("[audio-only]"))
       );
+      if (hasFinal) continue;
       
-      // Look for audio file (usually .f140.mp4 or .f140.m4a or similar)
-      const audioFile = relatedFiles.find(f => 
-        /\.f140\.(mp4|m4a)$/i.test(f) ||
-        /\.f251\.(webm|opus)$/i.test(f)
-      );
+      processedTitles.add(titleKey);
+      console.log(`[Archived V] Found incomplete download (format): "${baseTitle}" in ${path.basename(dir)}`);
       
-      // Check for final output file already existing
-      const finalMp4 = relatedFiles.find(f => 
-        f === `${baseTitle}.mp4` || f === `${baseTitle}.mkv` || f === `${baseTitle}.webm`
-      );
-      
-      if (finalMp4) {
-        console.log(`[Archived V] Final file already exists for "${baseTitle}", cleaning up fragments`);
-        cleanupFragmentsOnly(channelDir, baseTitle);
-        recoveredCount++;
-        continue;
-      }
-      
-      if (!videoPartial && !audioFile) {
-        console.log(`[Archived V] No salvageable files found for "${baseTitle}"`);
-        continue;
-      }
-      
-      // Attempt recovery
-      const recovered = await attemptFragmentMerge(channelDir, baseTitle, videoPartial, audioFile);
-      if (recovered) {
-        recoveredCount++;
-        cleanupFragmentsOnly(channelDir, baseTitle);
-      } else {
-        failedCount++;
-      }
+      const result = await processIncompleteDownload(dir, baseTitle, files);
+      if (result === "recovered") recoveredCount++;
+      else if (result === "failed") failedCount++;
     }
   }
   
@@ -1060,6 +1091,49 @@ async function recoverIncompleteDownloads() {
   } else {
     console.log("[Archived V] No incomplete downloads found to recover");
   }
+}
+
+// Process a single incomplete download
+async function processIncompleteDownload(dir, baseTitle, files) {
+  // Find related fragment files
+  const relatedFiles = files.filter(f => f.startsWith(baseTitle));
+  
+  // Look for partial video file (.part-Frag* or just the format file)
+  const videoPartial = relatedFiles.find(f => 
+    /\.f\d+\.(mp4|mkv|webm)\.part-Frag\d+$/i.test(f)
+  ) || relatedFiles.find(f =>
+    /\.f\d+\.(mp4|mkv|webm)$/i.test(f) && !/\.f140\./i.test(f) && !/\.f251\./i.test(f)
+  );
+  
+  // Look for audio file (usually .f140.mp4 or .f140.m4a or similar)
+  const audioFile = relatedFiles.find(f => 
+    /\.f140\.(mp4|m4a)$/i.test(f) ||
+    /\.f251\.(webm|opus)$/i.test(f)
+  );
+  
+  // Check for final output file already existing
+  const finalMp4 = relatedFiles.find(f => 
+    f === `${baseTitle}.mp4` || f === `${baseTitle}.mkv` || f === `${baseTitle}.webm`
+  );
+  
+  if (finalMp4) {
+    console.log(`[Archived V] Final file already exists for "${baseTitle}", cleaning up fragments`);
+    cleanupFragmentsOnly(dir, baseTitle);
+    return "recovered";
+  }
+  
+  if (!videoPartial && !audioFile) {
+    console.log(`[Archived V] No salvageable files found for "${baseTitle}"`);
+    return "skipped";
+  }
+  
+  // Attempt recovery
+  const recovered = await attemptFragmentMerge(dir, baseTitle, videoPartial, audioFile);
+  if (recovered) {
+    cleanupFragmentsOnly(dir, baseTitle);
+    return "recovered";
+  }
+  return "failed";
 }
 
 // Attempt to merge partial video and audio using ffmpeg
