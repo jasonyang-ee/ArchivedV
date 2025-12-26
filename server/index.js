@@ -1140,9 +1140,15 @@ async function processIncompleteDownload(dir, baseTitle, files) {
   // Audio formats (these are audio-only streams)
   const audioFormats = ["f140", "f251", "f250", "f249", "f139", "f171"];
   
-  // Find complete format files (NOT .part files)
-  const formatFiles = relatedFiles.filter(f => 
-    /\.f\d+\.(mp4|mkv|webm|m4a)$/i.test(f) && !f.includes(".part")
+  // Find ALL format files - including .part files (they contain usable data!)
+  // Priority: complete file > .part file > fragments
+  const completeFormatFiles = relatedFiles.filter(f => 
+    /\.f\d+\.(mp4|mkv|webm|m4a)$/i.test(f)
+  );
+  
+  // .part files are partially downloaded but often contain most of the data
+  const partFiles = relatedFiles.filter(f => 
+    /\.f\d+\.(mp4|mkv|webm|m4a)\.part$/i.test(f)
   );
   
   // Find fragment files (.part-Frag*)
@@ -1187,15 +1193,31 @@ async function processIncompleteDownload(dir, baseTitle, files) {
     }
   }
   
-  // Check for complete format files too
-  const completeVideoFiles = formatFiles.filter(f => 
+  // Get the best audio format (most fragments)
+  let bestAudioFormat = null;
+  let maxAudioFrags = 0;
+  for (const fmt of audioFragmentFormats) {
+    if (fragmentsByFormat[fmt].length > maxAudioFrags) {
+      maxAudioFrags = fragmentsByFormat[fmt].length;
+      bestAudioFormat = fmt;
+    }
+  }
+  
+  // Separate complete/part files by video vs audio
+  const completeVideoFiles = completeFormatFiles.filter(f => 
     !audioFormats.some(fmt => f.includes(`.${fmt}.`))
   );
-  const completeAudioFiles = formatFiles.filter(f => 
+  const completeAudioFiles = completeFormatFiles.filter(f => 
+    audioFormats.some(fmt => f.includes(`.${fmt}.`))
+  );
+  const partVideoFiles = partFiles.filter(f => 
+    !audioFormats.some(fmt => f.includes(`.${fmt}.`))
+  );
+  const partAudioFiles = partFiles.filter(f => 
     audioFormats.some(fmt => f.includes(`.${fmt}.`))
   );
   
-  // Get largest complete files
+  // Get largest files
   const getLargestFile = (fileList) => {
     let largest = null;
     let largestSize = 0;
@@ -1213,19 +1235,32 @@ async function processIncompleteDownload(dir, baseTitle, files) {
   
   const bestCompleteVideo = getLargestFile(completeVideoFiles);
   const bestCompleteAudio = getLargestFile(completeAudioFiles);
+  const bestPartVideo = getLargestFile(partVideoFiles);
+  const bestPartAudio = getLargestFile(partAudioFiles);
   
-  console.log(`[Archived V] Found: video=${bestVideoFormat ? `${maxVideoFrags} frags (${bestVideoFormat})` : 'none'}, complete_video=${bestCompleteVideo.file ? `${Math.round(bestCompleteVideo.size/1024/1024)}MB` : 'none'}, audio=${bestCompleteAudio.file ? `${Math.round(bestCompleteAudio.size/1024/1024)}MB` : 'none'}`);
+  // Log what we found
+  const videoInfo = bestVideoFormat ? `${maxVideoFrags} frags (${bestVideoFormat})` : 
+                    bestCompleteVideo.file ? `complete ${Math.round(bestCompleteVideo.size/1024/1024)}MB` :
+                    bestPartVideo.file ? `part ${Math.round(bestPartVideo.size/1024/1024)}MB` : 'none';
+  const audioInfo = bestAudioFormat ? `${maxAudioFrags} frags (${bestAudioFormat})` :
+                    bestCompleteAudio.file ? `complete ${Math.round(bestCompleteAudio.size/1024/1024)}MB` :
+                    bestPartAudio.file ? `part ${Math.round(bestPartAudio.size/1024/1024)}MB` : 'none';
+  
+  console.log(`[Archived V] Found: video=${videoInfo}, audio=${audioInfo}`);
   
   // Strategy:
-  // 1. If we have video fragments -> concatenate them into a video file
-  // 2. If we have complete audio -> merge with video
-  // 3. Always output .mp4 video file (not audio-only)
+  // 1. Get video: fragments > complete file > part file
+  // 2. Get audio: complete file > part file > concatenate fragments
+  // 3. Merge video + audio -> .mp4
   
   let videoPath = null;
+  let audioPath = null;
   let tempVideoCreated = false;
+  let tempAudioCreated = false;
   
-  // Try to create video from fragments
-  if (bestVideoFormat && maxVideoFrags >= 10) { // Need at least 10 fragments
+  // === VIDEO ===
+  // Try to create video from fragments first (usually most complete)
+  if (bestVideoFormat && maxVideoFrags >= 10) {
     console.log(`[Archived V] Concatenating ${maxVideoFrags} video fragments (${bestVideoFormat})...`);
     const tempVideo = path.join(dir, `${baseTitle}.temp_video.mp4`);
     const success = await concatenateFragments(dir, baseTitle, fragmentsByFormat[bestVideoFormat], tempVideo);
@@ -1235,19 +1270,39 @@ async function processIncompleteDownload(dir, baseTitle, files) {
     }
   }
   
-  // Fall back to complete video file if fragments didn't work
+  // Fall back to complete video file
   if (!videoPath && bestCompleteVideo.file && bestCompleteVideo.size > 100 * 1024) {
     videoPath = path.join(dir, bestCompleteVideo.file);
   }
   
-  // Get audio path
-  let audioPath = null;
+  // Fall back to .part video file
+  if (!videoPath && bestPartVideo.file && bestPartVideo.size > 100 * 1024) {
+    console.log(`[Archived V] Using partial video file: ${Math.round(bestPartVideo.size/1024/1024)}MB`);
+    videoPath = path.join(dir, bestPartVideo.file);
+  }
+  
+  // === AUDIO ===
+  // Try complete audio file first
   if (bestCompleteAudio.file && bestCompleteAudio.size > 50 * 1024) {
     audioPath = path.join(dir, bestCompleteAudio.file);
   }
   
-  // If we still have no video, try to create from audio fragments (with video)
-  // This is a last resort - the audio file might actually contain video in some edge cases
+  // Fall back to .part audio file (this is common - contains most of the audio data!)
+  if (!audioPath && bestPartAudio.file && bestPartAudio.size > 50 * 1024) {
+    console.log(`[Archived V] Using partial audio file: ${Math.round(bestPartAudio.size/1024/1024)}MB`);
+    audioPath = path.join(dir, bestPartAudio.file);
+  }
+  
+  // Fall back to concatenating audio fragments
+  if (!audioPath && bestAudioFormat && maxAudioFrags >= 10) {
+    console.log(`[Archived V] Concatenating ${maxAudioFrags} audio fragments (${bestAudioFormat})...`);
+    const tempAudio = path.join(dir, `${baseTitle}.temp_audio.m4a`);
+    const success = await concatenateFragments(dir, baseTitle, fragmentsByFormat[bestAudioFormat], tempAudio);
+    if (success) {
+      audioPath = tempAudio;
+      tempAudioCreated = true;
+    }
+  }
   
   if (!videoPath && !audioPath) {
     console.log(`[Archived V] No salvageable video or audio for "${baseTitle.substring(0, 50)}..."`);
@@ -1272,9 +1327,12 @@ async function processIncompleteDownload(dir, baseTitle, files) {
     recovered = await audioToVideoContainer(audioPath, outputFile);
   }
   
-  // Cleanup temp video if created
+  // Cleanup temp files if created
   if (tempVideoCreated && videoPath) {
     try { fs.unlinkSync(videoPath); } catch {}
+  }
+  if (tempAudioCreated && audioPath) {
+    try { fs.unlinkSync(audioPath); } catch {}
   }
   
   if (recovered) {
@@ -1492,7 +1550,11 @@ function cleanupFragmentsOnly(dir, baseTitle) {
       /\.part$/i,
       /\.part-Frag\d+$/i,
       /\.f\d+\.(mp4|mkv|webm|m4a|aac)$/i,
+      /\.f\d+\.(mp4|mkv|webm|m4a)\.part$/i,
       /\.f\d+\.(mp4|mkv|webm|m4a)\.part-Frag\d+$/i,
+      /\.temp_video\.mp4$/i,
+      /\.temp_audio\.m4a$/i,
+      /\.concat_list\.txt$/i,
     ];
     
     let removed = 0;
