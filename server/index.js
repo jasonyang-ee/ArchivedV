@@ -51,6 +51,31 @@ function markAuthSkipped(videoId) {
   authSkipCache.set(videoId, { expiresAt: Date.now() + AUTH_SKIP_TTL_MS });
 }
 
+// Track feed 404 errors to reduce log spam - only log first occurrence
+// Map: channelId -> { firstSeenAt: Date, lastLoggedAt: Date }
+const feed404Cache = new Map();
+const FEED_404_LOG_INTERVAL_MS = 60 * 60 * 1000; // Only re-log after 1 hour
+
+function shouldLogFeed404(channelId) {
+  const now = Date.now();
+  const entry = feed404Cache.get(channelId);
+  if (!entry) {
+    // First time seeing this 404
+    feed404Cache.set(channelId, { firstSeenAt: now, lastLoggedAt: now });
+    return true;
+  }
+  // Only log again after interval passes
+  if (now - entry.lastLoggedAt >= FEED_404_LOG_INTERVAL_MS) {
+    entry.lastLoggedAt = now;
+    return true;
+  }
+  return false;
+}
+
+function clearFeed404(channelId) {
+  feed404Cache.delete(channelId);
+}
+
 // Reverse proxy support (Caddy, nginx, etc.)
 // Set TRUST_PROXY=1 when behind a reverse proxy so req.ip reflects the real client IP
 // Default to 1 (trust first proxy only) for security while supporting common Docker reverse proxy deployments
@@ -1363,6 +1388,10 @@ async function checkUpdates() {
         continue;
       }
       const xml = await fetchFeedWithRetry(ch.link, ch.username || ch.id);
+      
+      // Feed succeeded - clear any 404 suppression for this channel
+      clearFeed404(ch.id);
+      
       const result = await xmlParser.parseStringPromise(xml);
       const entries = result.feed.entry || [];
       
@@ -1512,13 +1541,21 @@ async function checkUpdates() {
       } catch (e) {
         const { statusCode, code, message } = normalizeError(e);
         if (statusCode === 404) {
-          console.warn(`[${nowIso()}] Feed 404 for channel ${ch.username} (${ch.id}). Keeping channel but skipping this cycle.`);
+          // Only log first occurrence, then suppress for 1 hour to reduce log spam
+          if (shouldLogFeed404(ch.id)) {
+            console.warn(`[${nowIso()}] Feed 404 for channel ${ch.username} (${ch.id}). Skipping this cycle (will suppress repeated logs for 1h).`);
+          }
         } else if (code === "ETIMEDOUT" || code === "ECONNABORTED") {
           console.warn(`[${nowIso()}] Timeout fetching feed for channel ${ch.username}`);
         } else {
           console.error(`[Archived V] Feed error for channel ${ch.username}: ${message}`);
         }
       }
+    }
+
+    // Log summary of 404 channels if any (less spammy than individual logs)
+    if (feed404Cache.size > 0) {
+      console.log(`[${nowIso()}] Feed check complete. ${feed404Cache.size} channel(s) returning 404 (suppressing repeated logs).`);
     }
   
     status.lastRun = new Date().toISOString();
