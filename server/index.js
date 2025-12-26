@@ -7,7 +7,7 @@ import fs from "fs";
 import axios from "axios";
 import { Parser, processors } from "xml2js";
 import cron from "node-cron";
-import { spawn } from "child_process";
+import { spawn, execSync } from "child_process";
 import Pushover from "pushover-notifications";
 import dotenv from "dotenv";
 import rateLimit from "express-rate-limit";
@@ -969,6 +969,247 @@ function cleanupIntermediateFiles(dir, title) {
   }
 }
 
+// Check if ffmpeg is available
+function isFfmpegAvailable() {
+  try {
+    execSync("ffmpeg -version", { stdio: "pipe" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Scan for incomplete downloads and attempt to recover/merge fragments
+async function recoverIncompleteDownloads() {
+  if (!fs.existsSync(DOWNLOAD_DIR)) return;
+
+  const hasFfmpeg = isFfmpegAvailable();
+  if (!hasFfmpeg) {
+    console.log("[Archived V] ffmpeg not available, skipping fragment recovery");
+    return;
+  }
+
+  console.log("[Archived V] Scanning for incomplete downloads to recover...");
+  
+  const channelDirs = fs.readdirSync(DOWNLOAD_DIR, { withFileTypes: true })
+    .filter(d => d.isDirectory())
+    .map(d => path.join(DOWNLOAD_DIR, d.name));
+
+  let recoveredCount = 0;
+  let failedCount = 0;
+
+  for (const channelDir of channelDirs) {
+    const files = fs.readdirSync(channelDir);
+    
+    // Find .ytdl state files (indicates incomplete download)
+    const ytdlFiles = files.filter(f => f.endsWith(".ytdl"));
+    
+    for (const ytdlFile of ytdlFiles) {
+      // Extract base title from ytdl filename: "title.f299.mp4.ytdl" -> "title"
+      const match = ytdlFile.match(/^(.+)\.f\d+\.(mp4|mkv|webm|m4a)\.ytdl$/i);
+      if (!match) continue;
+      
+      const baseTitle = match[1];
+      console.log(`[Archived V] Found incomplete download: "${baseTitle}"`);
+      
+      // Find related fragment files
+      const relatedFiles = files.filter(f => f.startsWith(baseTitle));
+      
+      // Look for partial video file (.part-Frag* or just the format file)
+      const videoPartial = relatedFiles.find(f => 
+        /\.f\d+\.(mp4|mkv|webm)\.part-Frag\d+$/i.test(f) ||
+        /\.f\d+\.(mp4|mkv|webm)$/i.test(f)
+      );
+      
+      // Look for audio file (usually .f140.mp4 or .f140.m4a or similar)
+      const audioFile = relatedFiles.find(f => 
+        /\.f140\.(mp4|m4a)$/i.test(f) ||
+        /\.f251\.(webm|opus)$/i.test(f)
+      );
+      
+      // Check for final output file already existing
+      const finalMp4 = relatedFiles.find(f => 
+        f === `${baseTitle}.mp4` || f === `${baseTitle}.mkv` || f === `${baseTitle}.webm`
+      );
+      
+      if (finalMp4) {
+        console.log(`[Archived V] Final file already exists for "${baseTitle}", cleaning up fragments`);
+        cleanupFragmentsOnly(channelDir, baseTitle);
+        recoveredCount++;
+        continue;
+      }
+      
+      if (!videoPartial && !audioFile) {
+        console.log(`[Archived V] No salvageable files found for "${baseTitle}"`);
+        continue;
+      }
+      
+      // Attempt recovery
+      const recovered = await attemptFragmentMerge(channelDir, baseTitle, videoPartial, audioFile);
+      if (recovered) {
+        recoveredCount++;
+        cleanupFragmentsOnly(channelDir, baseTitle);
+      } else {
+        failedCount++;
+      }
+    }
+  }
+  
+  if (recoveredCount > 0 || failedCount > 0) {
+    console.log(`[Archived V] Fragment recovery complete: ${recoveredCount} recovered, ${failedCount} failed`);
+  } else {
+    console.log("[Archived V] No incomplete downloads found to recover");
+  }
+}
+
+// Attempt to merge partial video and audio using ffmpeg
+async function attemptFragmentMerge(dir, baseTitle, videoFile, audioFile) {
+  const outputFile = path.join(dir, `${baseTitle} [recovered].mp4`);
+  
+  // If we only have audio, just rename it
+  if (!videoFile && audioFile) {
+    const audioPath = path.join(dir, audioFile);
+    const audioOnlyOutput = path.join(dir, `${baseTitle} [audio-only].m4a`);
+    try {
+      fs.renameSync(audioPath, audioOnlyOutput);
+      console.log(`[Archived V] Saved audio-only file: "${baseTitle} [audio-only].m4a"`);
+      return true;
+    } catch (e) {
+      console.error(`[Archived V] Failed to save audio-only: ${e.message}`);
+      return false;
+    }
+  }
+  
+  // If we only have video partial, try to fix it
+  if (videoFile && !audioFile) {
+    const videoPath = path.join(dir, videoFile);
+    return await fixPartialVideo(videoPath, outputFile, baseTitle);
+  }
+  
+  // We have both video and audio - merge them
+  const videoPath = path.join(dir, videoFile);
+  const audioPath = path.join(dir, audioFile);
+  
+  console.log(`[Archived V] Attempting to merge: video="${videoFile}", audio="${audioFile}"`);
+  
+  return new Promise((resolve) => {
+    const ffmpeg = spawn("ffmpeg", [
+      "-y",                           // Overwrite output
+      "-i", videoPath,                // Input video
+      "-i", audioPath,                // Input audio
+      "-c", "copy",                   // Copy streams without re-encoding
+      "-movflags", "+faststart",      // Optimize for streaming
+      "-fflags", "+genpts",           // Generate presentation timestamps
+      "-err_detect", "ignore_err",    // Ignore errors in input
+      outputFile
+    ], { stdio: ["pipe", "pipe", "pipe"] });
+    
+    let stderr = "";
+    ffmpeg.stderr.on("data", (data) => {
+      stderr += data.toString();
+    });
+    
+    ffmpeg.on("close", (code) => {
+      if (code === 0 && fs.existsSync(outputFile)) {
+        const stats = fs.statSync(outputFile);
+        if (stats.size > 1024 * 1024) { // At least 1MB
+          console.log(`[Archived V] Successfully recovered: "${baseTitle} [recovered].mp4" (${Math.round(stats.size / 1024 / 1024)}MB)`);
+          resolve(true);
+        } else {
+          console.warn(`[Archived V] Recovered file too small, removing: "${baseTitle}"`);
+          try { fs.unlinkSync(outputFile); } catch {}
+          resolve(false);
+        }
+      } else {
+        console.warn(`[Archived V] ffmpeg merge failed for "${baseTitle}": exit code ${code}`);
+        // Try with just the video file if merge failed
+        resolve(fixPartialVideo(videoPath, outputFile, baseTitle));
+      }
+    });
+    
+    ffmpeg.on("error", (err) => {
+      console.error(`[Archived V] ffmpeg spawn error: ${err.message}`);
+      resolve(false);
+    });
+  });
+}
+
+// Try to fix/salvage a partial video file
+async function fixPartialVideo(videoPath, outputFile, baseTitle) {
+  if (!fs.existsSync(videoPath)) return false;
+  
+  console.log(`[Archived V] Attempting to fix partial video for "${baseTitle}"`);
+  
+  return new Promise((resolve) => {
+    const ffmpeg = spawn("ffmpeg", [
+      "-y",
+      "-fflags", "+genpts+igndts",
+      "-err_detect", "ignore_err",
+      "-i", videoPath,
+      "-c", "copy",
+      "-movflags", "+faststart",
+      outputFile
+    ], { stdio: ["pipe", "pipe", "pipe"] });
+    
+    ffmpeg.on("close", (code) => {
+      if (code === 0 && fs.existsSync(outputFile)) {
+        const stats = fs.statSync(outputFile);
+        if (stats.size > 512 * 1024) { // At least 512KB
+          console.log(`[Archived V] Fixed partial video: "${baseTitle} [recovered].mp4" (${Math.round(stats.size / 1024 / 1024)}MB)`);
+          resolve(true);
+        } else {
+          try { fs.unlinkSync(outputFile); } catch {}
+          resolve(false);
+        }
+      } else {
+        console.warn(`[Archived V] Could not fix partial video for "${baseTitle}"`);
+        resolve(false);
+      }
+    });
+    
+    ffmpeg.on("error", () => resolve(false));
+  });
+}
+
+// Clean up only fragment files, keeping thumbnails and recovered files
+function cleanupFragmentsOnly(dir, baseTitle) {
+  try {
+    const files = fs.readdirSync(dir);
+    const fragmentPatterns = [
+      /\.ytdl$/i,
+      /\.part$/i,
+      /\.part-Frag\d+$/i,
+      /\.f\d+\.(mp4|mkv|webm|m4a|aac)$/i,
+      /\.f\d+\.(mp4|mkv|webm|m4a)\.part-Frag\d+$/i,
+    ];
+    
+    let removed = 0;
+    for (const file of files) {
+      if (!file.startsWith(baseTitle)) continue;
+      
+      // Skip thumbnails and recovered files
+      if (file.endsWith(".png") || file.endsWith(".webp") || file.includes("[recovered]") || file.includes("[audio-only]")) continue;
+      
+      // Skip if it's the final merged file
+      if (file === `${baseTitle}.mp4` || file === `${baseTitle}.mkv` || file === `${baseTitle}.webm`) continue;
+      
+      // Remove if matches fragment pattern
+      if (fragmentPatterns.some(p => p.test(file))) {
+        try {
+          fs.unlinkSync(path.join(dir, file));
+          removed++;
+        } catch {}
+      }
+    }
+    
+    if (removed > 0) {
+      console.log(`[Archived V] Cleaned up ${removed} fragment file(s) for "${baseTitle}"`);
+    }
+  } catch (e) {
+    console.warn(`[Archived V] Error cleaning fragments: ${e.message}`);
+  }
+}
+
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: "6mb" }));
@@ -1617,9 +1858,12 @@ setInterval(() => {
 
 startDownloadWatchdog();
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+  
+  // Attempt to recover any incomplete downloads from previous runs
+  await recoverIncompleteDownloads().catch((err) => console.error("Recovery error:", err));
   
   // Run initial check for new streams on startup
   console.log("Running initial check for new streams...");
