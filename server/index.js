@@ -412,7 +412,7 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
       "--retries",
       "20",
       "--fragment-retries",
-      "infinite",
+      "50",
       "--skip-unavailable-fragments",
       "--no-abort-on-error",
       "--keep-fragments",
@@ -445,6 +445,9 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
     stderr: "",
     killedByWatchdog: false,
     killedByAuthSkip: false,
+    killedBy403Loop: false,
+    consecutive403Count: 0,
+    last403Fragment: null,
   };
 
   activeDownloads.set(downloadId, tracking);
@@ -467,6 +470,31 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
       .split(/\r?\n/)
       .forEach((line) => {
         if (line) console.warn(`[yt-dlp] ${line}`);
+
+        // Detect 403 Forbidden retry loops (stream ended but yt-dlp keeps retrying same fragment)
+        if (!tracking.killedBy403Loop && line) {
+          const match403 = line.match(/Got error: HTTP Error 403.*Retrying fragment (\d+)/i);
+          if (match403) {
+            const fragmentNum = match403[1];
+            if (tracking.last403Fragment === fragmentNum) {
+              tracking.consecutive403Count++;
+              // If we've seen 100+ consecutive 403 errors on the same fragment, stream has ended
+              if (tracking.consecutive403Count >= 100) {
+                tracking.killedBy403Loop = true;
+                console.warn(
+                  `[Archived V] Stopping yt-dlp for "${downloadInfo.title}" - stream appears to have ended (${tracking.consecutive403Count} consecutive 403 errors on fragment ${fragmentNum})`
+                );
+                try {
+                  proc.kill("SIGTERM");
+                } catch {}
+              }
+            } else {
+              // Different fragment, reset counter
+              tracking.last403Fragment = fragmentNum;
+              tracking.consecutive403Count = 1;
+            }
+          }
+        }
 
         // If yt-dlp reports a login/members-only requirement, it may keep looping due to --wait-for-video.
         // Detect early and stop immediately when cookies aren't configured.
@@ -497,17 +525,6 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
   });
 
   proc.on("close", (code) => {
-    // If watchdog already handled requeue, don't double-count attempts.
-    if (tracking.killedByWatchdog || tracking.killedByAuthSkip) {
-      activeDownloads.delete(downloadId);
-
-      status.currentDownloads = status.currentDownloads.filter((d) => d.id !== downloadId);
-      db.read();
-      db.data.currentDownloads = (db.data.currentDownloads || []).filter((d) => d.id !== downloadId);
-      db.write();
-      return;
-    }
-
     // Always clear active tracking
     activeDownloads.delete(downloadId);
 
@@ -515,7 +532,29 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
     status.currentDownloads = status.currentDownloads.filter((d) => d.id !== downloadId);
     db.read();
     db.data.currentDownloads = (db.data.currentDownloads || []).filter((d) => d.id !== downloadId);
-    db.write();
+
+    // If killed by 403 loop, treat as stream ended - clean up and mark as complete
+    if (tracking.killedBy403Loop) {
+      cleanupIntermediateFiles(dir, downloadInfo.title);
+      status.lastCompleted = downloadInfo.title;
+      console.log(`[Archived V] Stream ended for "${downloadInfo.title}" - download complete (403 loop detected)`);
+      if (process.env.PUSHOVER_APP_TOKEN && process.env.PUSHOVER_USER_TOKEN) {
+        push.send({ message: `Stream ended: ${downloadInfo.title}`, title: downloadInfo.title }, () => {});
+      }
+      db.data.history.push({ title: downloadInfo.title, time: nowIso(), note: "stream ended" });
+      // Remove any retry job for this video
+      db.data.retryQueue = (db.data.retryQueue || []).filter(
+        (j) => !(j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId)
+      );
+      db.write();
+      return;
+    }
+
+    // If watchdog or auth-skip killed it, they already handled requeue - just clean up
+    if (tracking.killedByWatchdog || tracking.killedByAuthSkip) {
+      db.write();
+      return;
+    }
 
     if (code === 0) {
       cleanupIntermediateFiles(dir, downloadInfo.title);
