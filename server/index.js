@@ -450,8 +450,8 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
       "png",
       "--embed-thumbnail",
       "--add-metadata",
-      "--merge-output-format",
-      "mp4",
+    //   "--merge-output-format",
+    //   "mp4",
       videoLink,
     ],
     { stdio: ["pipe", "pipe", "pipe"] }
@@ -718,6 +718,8 @@ async function processRetryQueue() {
     // Refresh counts into status
     status.retryQueue = getRetryQueueCounts();
 
+    const ignoreKeywords = (db.data.ignoreKeywords || []).map((k) => k.toLowerCase());
+
     // Start due jobs while capacity allows
     const now = Date.now();
     const due = db.data.retryQueue
@@ -725,6 +727,14 @@ async function processRetryQueue() {
       .sort((a, b) => new Date(a.nextAttemptAt).getTime() - new Date(b.nextAttemptAt).getTime());
 
     for (const job of due) {
+      // Check ignore keywords - skip and remove if matches
+      if (ignoreKeywords.some((k) => job.title.toLowerCase().includes(k))) {
+        db.data.retryQueue = db.data.retryQueue.filter((j) => j.key !== job.key);
+        db.write();
+        console.log(`[Archived V] Skipping retry for "${job.title}" - matches ignore keyword`);
+        continue;
+      }
+
       if (!canStartAnotherDownload()) break;
 
       // Avoid duplicates: if already active for same channel/video, skip.
