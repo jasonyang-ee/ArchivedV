@@ -970,7 +970,7 @@ function cleanupIntermediateFiles(dir, title) {
   }
 }
 
-function autoMerge(specificFolder = null) {
+function zautoMerge(specificFolder = null) {
   console.log('[Archived V] Starting auto merge of audio and video files...');
   try {
     if (specificFolder) {
@@ -1553,16 +1553,18 @@ async function checkUpdates() {
         const folderName = `${datePrefix}${sanitize(title)}`;
         let dir = path.join(channelDir, folderName);
         
-        // Check keyword match first before adding to downloads
-        const match = keywords.some((k) => title.toLowerCase().includes(k));
-        if (!match) {
-          continue;
-        }
-        
         // Check ignore keywords - exclude if any ignore keyword is found
         const shouldIgnore = ignoreKeywords.some((k) => title.toLowerCase().includes(k));
         if (shouldIgnore) {
           continue;
+        }
+        
+        // Check keyword match if keywords are set
+        if (keywords.length > 0) {
+          const match = keywords.some((k) => title.toLowerCase().includes(k));
+          if (!match) {
+            continue;
+          }
         }
         
         const sanitizedTitle = sanitize(title);
