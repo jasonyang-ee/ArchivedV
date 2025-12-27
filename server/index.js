@@ -427,9 +427,8 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
     [
       ...getYtDlpAuthArgs(),
       "--live-from-start",
-      "--wait-for-video",
-      "30",
       "-ciw",
+	  "--no-part",
       "--no-progress",
       "--no-cache-dir",
       "--socket-timeout",
@@ -440,7 +439,6 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
       "50",
       "--skip-unavailable-fragments",
       "--no-abort-on-error",
-      "--keep-fragments",
       "--js-runtimes",
       "node",
       "--remote-components",
