@@ -450,6 +450,7 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
       "png",
       "--embed-thumbnail",
       "--add-metadata",
+	  "-f 299+140",
     //   "--merge-output-format",
     //   "mp4",
       videoLink,
