@@ -970,7 +970,7 @@ function cleanupIntermediateFiles(dir, title) {
   }
 }
 
-function zautoMerge(specificFolder = null) {
+function autoMerge(specificFolder = null) {
   console.log('[Archived V] Starting auto merge of audio and video files...');
   try {
     if (specificFolder) {
