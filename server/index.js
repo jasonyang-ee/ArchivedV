@@ -920,7 +920,6 @@ function autoMerge(specificFolder = null, callback = null) {
   
   try {
     if (specificFolder) {
-	  console.log('[Archived V] Starting auto merge of audio and video in folder:', specificFolder);
       mergeInFolder(specificFolder, callback);
     } else {
 	  console.log('[Archived V] Starting auto merge of audio and video in all folders');
@@ -981,6 +980,15 @@ function mergeInFolder(folder, callback = null) {
         titleMap.get(title).audio = file;
       }
     }
+
+	// if no pairs found, exit
+	if (titleMap.size === 0) {
+	  if (callback) callback();
+	  return;
+	}
+
+	console.log(`[Archived V] Starting auto merge of audio and video in folder: ${folder}`);
+
     const titleParts = Array.from(titleMap.entries()).filter(([title, parts]) => parts.video && parts.audio);
     if (titleParts.length === 0) {
       if (callback) callback();
@@ -1542,7 +1550,6 @@ async function checkUpdates() {
           if (download.downloadInfo.channel === ch.id && 
               download.downloadInfo.title === title) {
             isCurrentlyDownloading = true;
-            console.log(`[Archived V] Schdueler Skipping "${title}" - already downloading (ID: ${downloadId})`);
             break;
           }
         }
