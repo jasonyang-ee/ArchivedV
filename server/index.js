@@ -950,25 +950,26 @@ function cleanupIntermediateFiles(dir, title) {
 
 function handleDownloadSuccess(dir, downloadInfo, note = null) {
   cleanupIntermediateFiles(dir, downloadInfo.title);
-  autoMerge(dir);
-  status.lastCompleted = downloadInfo.title;
-  const message = note ? `Stream ended: ${downloadInfo.title}` : `Downloaded: ${downloadInfo.title}`;
-  if (process.env.PUSHOVER_APP_TOKEN && process.env.PUSHOVER_USER_TOKEN) {
-    push.send({ message, title: downloadInfo.title }, () => {});
-  }
-  db.read();
-  db.data.history.push({ title: downloadInfo.title, time: nowIso(), ...(note && { note }) });
-  db.data.retryQueue = (db.data.retryQueue || []).filter(
-    (j) => !(j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId)
-  );
-  db.write();
+  autoMerge(dir, () => {
+    status.lastCompleted = downloadInfo.title;
+    const message = note ? `Stream ended: ${downloadInfo.title}` : `Downloaded: ${downloadInfo.title}`;
+    if (process.env.PUSHOVER_APP_TOKEN && process.env.PUSHOVER_USER_TOKEN) {
+      push.send({ message, title: downloadInfo.title }, () => {});
+    }
+    db.read();
+    db.data.history.push({ title: downloadInfo.title, time: nowIso(), ...(note && { note }) });
+    db.data.retryQueue = (db.data.retryQueue || []).filter(
+      (j) => !(j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId)
+    );
+    db.write();
+  });
 }
 
-function autoMerge(specificFolder = null) {
+function autoMerge(specificFolder = null, callback = null) {
   console.log('[Archived V] Starting auto merge of audio and video files...');
   try {
     if (specificFolder) {
-      mergeInFolder(specificFolder);
+      mergeInFolder(specificFolder, callback);
     } else {
       const videosFolders = findVideosFolders(DOWNLOAD_DIR);
       for (const folder of videosFolders) {
@@ -1011,7 +1012,7 @@ function findVideosFolders(root) {
   return folders;
 }
 
-function mergeInFolder(folder) {
+function mergeInFolder(folder, callback = null) {
   try {
     const files = fs.readdirSync(folder);
     const titleMap = new Map();
@@ -1026,50 +1027,61 @@ function mergeInFolder(folder) {
         titleMap.get(title).audio = file;
       }
     }
-    for (const [title, parts] of titleMap) {
-      if (parts.video && parts.audio) {
-        const output = `${title}.mp4`;
-        const outputPath = path.join(folder, output);
-        if (fs.existsSync(outputPath)) {
-          console.log(`[Archived V] Merged file already exists for "${title}", skipping.`);
-          continue;
-        }
-        console.log(`[Archived V] Merging audio and video for "${title}"`);
-        try {
-          const proc = spawn('ffmpeg', [
-            '-i', path.join(folder, parts.video),
-            '-i', path.join(folder, parts.audio),
-            '-c', 'copy',
-            outputPath
-          ], { stdio: 'inherit' });
-          proc.on('close', (code) => {
-            if (code === 0) {
-              console.log(`[Archived V] Successfully merged "${title}"`);
-              // remove the parts
-              try {
-                fs.unlinkSync(path.join(folder, parts.video));
-                fs.unlinkSync(path.join(folder, parts.audio));
-                // also remove .ytdl files if exist
-                const ytdlVideo = `${parts.video}.ytdl`;
-                const ytdlAudio = `${parts.audio}.ytdl`;
-                const ytdlVideoPath = path.join(folder, ytdlVideo);
-                const ytdlAudioPath = path.join(folder, ytdlAudio);
-                if (fs.existsSync(ytdlVideoPath)) fs.unlinkSync(ytdlVideoPath);
-                if (fs.existsSync(ytdlAudioPath)) fs.unlinkSync(ytdlAudioPath);
-              } catch (e) {
-                console.warn(`[Archived V] Failed to clean up parts for "${title}": ${e.message}`);
-              }
-            } else {
-              console.error(`[Archived V] Failed to merge "${title}", ffmpeg exit code ${code}`);
+    const titleParts = Array.from(titleMap.entries()).filter(([title, parts]) => parts.video && parts.audio);
+    if (titleParts.length === 0) {
+      if (callback) callback();
+      return;
+    }
+    let completed = 0;
+    for (const [title, parts] of titleParts) {
+      const output = `${title}.mp4`;
+      const outputPath = path.join(folder, output);
+      if (fs.existsSync(outputPath)) {
+        console.log(`[Archived V] Merged file already exists for "${title}", skipping.`);
+        completed++;
+        if (completed === titleParts.length && callback) callback();
+        continue;
+      }
+      console.log(`[Archived V] Merging audio and video for "${title}"`);
+      try {
+        const proc = spawn('ffmpeg', [
+          '-i', path.join(folder, parts.video),
+          '-i', path.join(folder, parts.audio),
+          '-c', 'copy',
+          outputPath
+        ], { stdio: 'inherit' });
+        proc.on('close', (code) => {
+          if (code === 0) {
+            console.log(`[Archived V] Successfully merged "${title}"`);
+            // remove the parts
+            try {
+              fs.unlinkSync(path.join(folder, parts.video));
+              fs.unlinkSync(path.join(folder, parts.audio));
+              // also remove .ytdl files if exist
+              const ytdlVideo = `${parts.video}.ytdl`;
+              const ytdlAudio = `${parts.audio}.ytdl`;
+              const ytdlVideoPath = path.join(folder, ytdlVideo);
+              const ytdlAudioPath = path.join(folder, ytdlAudio);
+              if (fs.existsSync(ytdlVideoPath)) fs.unlinkSync(ytdlVideoPath);
+              if (fs.existsSync(ytdlAudioPath)) fs.unlinkSync(ytdlAudioPath);
+            } catch (e) {
+              console.warn(`[Archived V] Failed to clean up parts for "${title}": ${e.message}`);
             }
-          });
-        } catch (e) {
-          console.error(`[Archived V] Error starting ffmpeg for "${title}": ${e.message}`);
-        }
+          } else {
+            console.error(`[Archived V] Failed to merge "${title}", ffmpeg exit code ${code}`);
+          }
+          completed++;
+          if (completed === titleParts.length && callback) callback();
+        });
+      } catch (e) {
+        console.error(`[Archived V] Error starting ffmpeg for "${title}": ${e.message}`);
+        completed++;
+        if (completed === titleParts.length && callback) callback();
       }
     }
   } catch (e) {
     console.error(`[Archived V] Error merging in folder ${folder}: ${e.message}`);
+    if (callback) callback();
   }
 }
 
