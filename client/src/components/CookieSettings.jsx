@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
-import { api } from "../utils/api";
+import { useEffect, useState } from "react";
+import api from '../utils/api';
 
-function CookieSettings() {
+export default function CookieSettings() {
   const [status, setStatus] = useState(null);
   const [cookiesText, setCookiesText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -130,5 +130,3 @@ function CookieSettings() {
     </div>
   );
 }
-
-export default CookieSettings;

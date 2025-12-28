@@ -9,8 +9,11 @@ services:
     volumes:
       - ./data:/app/data
       - ./download:/app/download
+	    # - ./archivedv/cookies.txt:/app/data/youtube_cookies.txt:ro   Optional: If you want to manage cookies as a separate file on the host,
     environment:
       TZ: America/Los_Angeles
       # PUSHOVER_APP_TOKEN: ${PUSHOVER_APP_TOKEN}
       # PUSHOVER_USER_TOKEN: ${PUSHOVER_USER_TOKEN}
-      # TRUST_PROXY: "1"  # Default: 1 (trust first proxy). Use "false" if exposed directly to internet
+	    # TRUST_PROXY: "1"                                             Optional: Default is 1 (trust first proxy). Set to "false" if 
+	  # sysctls:                                                       Optional: Force disable ipv6 if you have issues with it
+	  #   - net.ipv6.conf.all.disable_ipv6=1
