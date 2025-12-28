@@ -1392,6 +1392,11 @@ app.delete("/api/downloads/:downloadId", (req, res) => {
     db.read();
     db.data.currentDownloads = db.data.currentDownloads.filter(d => d.id !== downloadId);
     
+    // Remove from retry queue if present
+    db.data.retryQueue = (db.data.retryQueue || []).filter(
+      (j) => !(j.channelId === download.downloadInfo.channel && j.videoId === download.downloadInfo.videoId)
+    );
+    
     // Add the cancelled video title to ignore keywords to prevent re-downloading
     if (!db.data.ignoreKeywords) db.data.ignoreKeywords = [];
     const cancelledTitle = download.downloadInfo.title;
@@ -1411,7 +1416,7 @@ app.delete("/api/downloads/:downloadId", (req, res) => {
     }, 10000);
     
     console.log(`[Archived V] Cancelled download: ${cancelledTitle}`);
-    res.json({ success: true, message: "Download cancelled and added to ignore list" });
+    res.json({ success: true, message: "Download cancelled, removed from retry queue, and added to ignore list" });
   } catch (err) {
     console.error(`[Archived V] Error cancelling download: ${err.message}`);
     res.status(500).json({ error: "Failed to cancel download" });
