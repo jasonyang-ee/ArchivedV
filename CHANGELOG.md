@@ -19,6 +19,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - 
 
+## [1.5.0] - 2025-12-27
+
+### Added
+
+- Auto merge feature for audio/video files using ffmpeg after download completion
+- Callback support for auto merge operations to ensure proper cleanup timing
+
+### Changed
+
+- yt-dlp now downloads separate audio (140) and video (299) streams instead of merged format
+- Removed `--merge-output-format mp4` from yt-dlp arguments to allow manual merging
+- Refactored download success handling with consolidated cleanup logic
+
+### Fixed
+
+- Ignore keyword logic now properly checks ignore keywords before keyword filters
+- Download cancellation now removes cancelled videos from retry queue
+- Enhanced retry queue management to prevent double downloading of ignored videos
+- Improved intermediate file cleanup timing and error handling
+- Fixed yt-dlp format specification for better audio/video separation 
+
 ## [1.4.7] - 2025-12-25
 
 ### Fixed
