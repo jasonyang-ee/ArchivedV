@@ -428,7 +428,7 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
       ...getYtDlpAuthArgs(),
       "--live-from-start",
       "-ciw",
-	  "--no-part",
+      "--no-part",
       "--no-progress",
       "--no-cache-dir",
       "--socket-timeout",
@@ -451,8 +451,6 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
       "--embed-thumbnail",
       "--add-metadata",
 	  "-f 299+140",
-    //   "--merge-output-format",
-    //   "mp4",
       videoLink,
     ],
     { stdio: ["pipe", "pipe", "pipe"] }
@@ -559,19 +557,8 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
 
     // If killed by 403 loop, treat as stream ended - clean up and mark as complete
     if (tracking.killedBy403Loop) {
-      cleanupIntermediateFiles(dir, downloadInfo.title);
-      autoMerge(dir);
-      status.lastCompleted = downloadInfo.title;
+      handleDownloadSuccess(dir, downloadInfo, "stream ended");
       console.log(`[Archived V] Stream ended for "${downloadInfo.title}" - download complete (403 loop detected)`);
-      if (process.env.PUSHOVER_APP_TOKEN && process.env.PUSHOVER_USER_TOKEN) {
-        push.send({ message: `Stream ended: ${downloadInfo.title}`, title: downloadInfo.title }, () => {});
-      }
-      db.data.history.push({ title: downloadInfo.title, time: nowIso(), note: "stream ended" });
-      // Remove any retry job for this video
-      db.data.retryQueue = (db.data.retryQueue || []).filter(
-        (j) => !(j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId)
-      );
-      db.write();
       return;
     }
 
@@ -582,19 +569,7 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
     }
 
     if (code === 0) {
-      cleanupIntermediateFiles(dir, downloadInfo.title);
-      autoMerge(dir);
-      status.lastCompleted = downloadInfo.title;
-      if (process.env.PUSHOVER_APP_TOKEN && process.env.PUSHOVER_USER_TOKEN) {
-        push.send({ message: `Downloaded: ${downloadInfo.title}`, title: downloadInfo.title }, () => {});
-      }
-      db.read();
-      db.data.history.push({ title: downloadInfo.title, time: nowIso() });
-      // Remove any retry job for this video
-      db.data.retryQueue = (db.data.retryQueue || []).filter(
-        (j) => !(j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId)
-      );
-      db.write();
+      handleDownloadSuccess(dir, downloadInfo);
       return;
     }
 
@@ -655,15 +630,7 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
 
     // If we ended up with a usable merged file, treat it as success.
     if (folderState.kind === "complete") {
-      cleanupIntermediateFiles(dir, downloadInfo.title);
-      autoMerge(dir);
-      status.lastCompleted = downloadInfo.title;
-      db.read();
-      db.data.history.push({ title: downloadInfo.title, time: nowIso() });
-      db.data.retryQueue = (db.data.retryQueue || []).filter(
-        (j) => !(j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId)
-      );
-      db.write();
+      handleDownloadSuccess(dir, downloadInfo);
       console.warn(`[Archived V] yt-dlp exited ${code} but produced a usable file for "${downloadInfo.title}"; recording as success.`);
       return;
     }
@@ -979,6 +946,22 @@ function cleanupIntermediateFiles(dir, title) {
   } catch (e) {
     console.error(`[Archived V] Error during intermediate file cleanup: ${e.message}`);
   }
+}
+
+function handleDownloadSuccess(dir, downloadInfo, note = null) {
+  cleanupIntermediateFiles(dir, downloadInfo.title);
+  autoMerge(dir);
+  status.lastCompleted = downloadInfo.title;
+  const message = note ? `Stream ended: ${downloadInfo.title}` : `Downloaded: ${downloadInfo.title}`;
+  if (process.env.PUSHOVER_APP_TOKEN && process.env.PUSHOVER_USER_TOKEN) {
+    push.send({ message, title: downloadInfo.title }, () => {});
+  }
+  db.read();
+  db.data.history.push({ title: downloadInfo.title, time: nowIso(), ...(note && { note }) });
+  db.data.retryQueue = (db.data.retryQueue || []).filter(
+    (j) => !(j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId)
+  );
+  db.write();
 }
 
 function autoMerge(specificFolder = null) {
