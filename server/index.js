@@ -1224,7 +1224,7 @@ app.post("/api/channels", async (req, res) => {
   let channelName = username;
   try {
     if (!isValidYouTubeUrl(xmlLink)) {
-      console.error(`Invalid RSS URL for channel ${username}: ${xmlLink}`);
+      console.error(`[Archived V] Invalid RSS URL for channel ${username}: ${xmlLink}`);
       channelName = username; // fallback
     } else {
       const xml = (await axios.get(xmlLink)).data;
@@ -1234,7 +1234,7 @@ app.post("/api/channels", async (req, res) => {
       }
     }
   } catch (e) {
-    console.warn("Failed to fetch channel name from RSS, using username");
+    console.warn("[Archived V] Failed to fetch channel name from RSS, using username");
   }
   
   if (!existing) {
@@ -1370,6 +1370,11 @@ app.delete("/api/downloads/:downloadId", (req, res) => {
     }, 10000);
     
     console.log(`[Archived V] Cancelled download: ${cancelledTitle}`);
+
+	// Trigger auto-merge in case partial files exist
+	console.log('[Archived V] Triggering auto-merge after download cancellation');
+	autoMerge(download.dir);
+
     res.json({ success: true, message: "Download cancelled, removed from retry queue, and added to ignore list" });
   } catch (err) {
     console.error(`[Archived V] Error cancelling download: ${err.message}`);
@@ -1394,20 +1399,9 @@ app.delete("/api/history", (req, res) => {
 // API: Manual refresh
 app.post("/api/refresh", (req, res) => {
   status.current = null;
-  checkUpdates().catch((err) => console.error("Refresh error:", err));
+  checkUpdates().catch((err) => console.error("[Archived V] Refresh error:", err));
   res.json(status);
-  
-  const now = new Date();
-  const timeStr = now.toLocaleString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-  console.log(`[${now.toISOString()}][${timeStr}] Manual Checking for New Streams`);
+  console.log(`[Archived V] Manual Checking for New Streams`);
 });
 
 // Download job
@@ -1459,7 +1453,7 @@ async function checkUpdates() {
       try {
       // Validate URL before making request to prevent SSRF
       if (!isValidYouTubeUrl(ch.link)) {
-        console.error(`Skipping invalid channel URL: ${ch.link}`);
+        console.error(`[Archived V] Skipping invalid channel URL: ${ch.link}`);
         continue;
       }
       const xml = await fetchFeedWithRetry(ch.link, ch.username || ch.id);
@@ -1620,10 +1614,10 @@ async function checkUpdates() {
         if (statusCode === 404) {
           // Only log first occurrence, then suppress for 1 hour to reduce log spam
           if (shouldLogFeed404(ch.id)) {
-            console.warn(`[${nowIso()}] Feed 404 for channel ${ch.username} (${ch.id}). Skipping this cycle (will suppress repeated logs for 1h).`);
+            console.warn(`[Archived V] Feed 404 for channel ${ch.username} (${ch.id}). Skipping this cycle (will suppress repeated logs for 1h).`);
           }
         } else if (code === "ETIMEDOUT" || code === "ECONNABORTED") {
-          console.warn(`[${nowIso()}] Timeout fetching feed for channel ${ch.username}`);
+          console.warn(`[Archived V] Timeout fetching feed for channel ${ch.username}`);
         } else {
           console.error(`[Archived V] Feed error for channel ${ch.username}: ${message}`);
         }
@@ -1632,7 +1626,7 @@ async function checkUpdates() {
 
     // Log summary of 404 channels if any (less spammy than individual logs)
     if (feed404Cache.size > 0) {
-      console.log(`[${nowIso()}] Feed check complete. ${feed404Cache.size} channel(s) returning 404 (suppressing repeated logs).`);
+      console.log(`[Archived V] Feed check complete. ${feed404Cache.size} channel(s) returning 404 (suppressing repeated logs).`);
     }
   
     status.lastRun = new Date().toISOString();
@@ -1657,7 +1651,7 @@ async function checkUpdates() {
       checkPending = false;
       // Run one more pass if something requested while we were running
       setImmediate(() => {
-        checkUpdates().catch((err) => console.error("Queued check error:", err));
+        checkUpdates().catch((err) => console.error("[Archived V] Queued check error:", err));
       });
     }
   }
@@ -1673,7 +1667,7 @@ if (process.env.NODE_ENV === "production") {
 // Start normal cron scheduler
 cron.schedule("*/10 * * * *", () => {
   console.log(`[Archived V] Scheduler Checking for New Streams`);
-  checkUpdates().catch((err) => console.error("Cron error:", err));
+  checkUpdates().catch((err) => console.error("[Archived V] Cron error:", err));
 });
 
 // Start retry queue scheduler and watchdog
@@ -1689,7 +1683,7 @@ app.listen(PORT, () => {
   
   // Run initial check for new streams on startup
   console.log("[Archived V] Initial Checking for New Streams");
-  checkUpdates().catch((err) => console.error("Startup refresh error:", err));
+  checkUpdates().catch((err) => console.error("[Archived V] Startup refresh error:", err));
 
   // Run auto merge on startup
   autoMerge();
