@@ -1670,24 +1670,13 @@ if (process.env.NODE_ENV === "production") {
   });
 }
 
-// Start cron + server
+// Start normal cron scheduler
 cron.schedule("*/10 * * * *", () => {
-  const now = new Date();
-  const timeStr = now.toLocaleString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-  console.log(`[${now.toISOString()}][${timeStr}] Scheduled Checking for New Streams`);
-  // Always run check - it will handle concurrent downloads internally
+  console.log(`[Archived V] Scheduler Checking for New Streams`);
   checkUpdates().catch((err) => console.error("Cron error:", err));
 });
 
-// Retry scheduler and watchdog
+// Start retry queue scheduler and watchdog
 setInterval(() => {
   processRetryQueue().catch((err) => console.error("Retry queue error:", err));
 }, 60 * 1000);
@@ -1695,11 +1684,11 @@ setInterval(() => {
 startDownloadWatchdog();
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+  console.log(`[Archived V] Server running on port ${PORT}`);
+  console.log(`[Archived V] Environment: ${process.env.NODE_ENV || "development"}`);
   
   // Run initial check for new streams on startup
-  console.log("Running initial check for new streams...");
+  console.log("[Archived V] Initial Checking for New Streams");
   checkUpdates().catch((err) => console.error("Startup refresh error:", err));
 
   // Run auto merge on startup
