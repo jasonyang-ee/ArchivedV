@@ -102,8 +102,18 @@ function StatusDisplay({ status, onRefresh, onCancelDownload }) {
                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       Channel: {download.channelName || download.username} • Started: {formatDate(download.startTime)}
                     </div>
+                    <div className="mt-1">
+                      <a
+                        href={download.videoLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
+                      >
+                        View →
+                      </a>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
                     <svg
                       className="w-5 h-5 animate-spin text-amber-600 dark:text-amber-500"
                       fill="none"
