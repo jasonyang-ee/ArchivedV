@@ -1033,7 +1033,10 @@ function mergeInFolder(folder, callback = null) {
             console.error(`[Archived V] Failed to merge "${title}", ffmpeg exit code ${code}`);
           }
           completed++;
-          if (completed === titleParts.length && callback) callback();
+          if (completed === titleParts.length && callback) {
+			console.log(`[Archived V] Auto merge completed for folder: ${folder}`);
+			callback();
+		  }
         });
       } catch (e) {
         console.error(`[Archived V] Error starting ffmpeg for "${title}": ${e.message}`);
