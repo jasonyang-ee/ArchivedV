@@ -898,58 +898,7 @@ function safeCleanupDirectory(dir, reason = "") {
   }
 }
 
-// Clean up intermediate yt-dlp files after successful download
-function cleanupIntermediateFiles(dir, title) {
-  try {
-    if (!fs.existsSync(dir)) return;
-    
-    const files = fs.readdirSync(dir);
-
-    // Remove intermediate fragment files left by yt-dlp during live downloads.
-    // Examples:
-    // - <title>.f140.mp4
-    // - <title>.f140.mp4.part-Frag7
-    // - .f140.mp4 (older pattern)
-    const fragmentFiles = files.filter((f) => {
-      if (/\.part-frag\d+$/i.test(f)) return true;
-      if (/^\.f\d+\.(mp4|mkv|webm|m4a|aac)$/i.test(f)) return true;
-      if (/\.f\d+\.(mp4|mkv|webm|m4a|aac)$/i.test(f)) return true;
-      if (/\.f\d+\.(mp4|mkv|webm|m4a|aac)\.part-frag\d+$/i.test(f)) return true;
-      return false;
-    });
-
-    let removedFragments = 0;
-    fragmentFiles.forEach((f) => {
-      try {
-        fs.unlinkSync(path.join(dir, f));
-        removedFragments += 1;
-      } catch (e) {
-        console.warn(`[Archived V] Failed to remove fragment ${f}: ${e.message}`);
-      }
-    });
-    
-    // Remove original webp thumbnail if png exists
-    const hasPng = files.some(f => f.endsWith('.png'));
-    if (hasPng) {
-      const webpFile = files.find(f => f.endsWith('.webp'));
-      if (webpFile) {
-        try {
-          fs.unlinkSync(path.join(dir, webpFile));
-          console.log(`[Archived V] Cleaned up duplicate thumbnail: ${webpFile}`);
-        } catch (e) {
-          console.warn(`[Archived V] Failed to remove duplicate thumbnail ${webpFile}: ${e.message}`);
-        }
-      }
-    }
-    
-    console.log(`[Archived V] Cleanup completed for "${title}" - removed ${removedFragments} fragment file(s)`);
-  } catch (e) {
-    console.error(`[Archived V] Error during intermediate file cleanup: ${e.message}`);
-  }
-}
-
 function handleDownloadSuccess(dir, downloadInfo, note = null) {
-  cleanupIntermediateFiles(dir, downloadInfo.title);
   autoMerge(dir, () => {
     status.lastCompleted = downloadInfo.title;
     const message = note ? `Stream ended: ${downloadInfo.title}` : `Downloaded: ${downloadInfo.title}`;
@@ -966,15 +915,18 @@ function handleDownloadSuccess(dir, downloadInfo, note = null) {
 }
 
 function autoMerge(specificFolder = null, callback = null) {
-  console.log('[Archived V] Starting auto merge of audio and video files...');
+  
   try {
     if (specificFolder) {
+	  console.log('[Archived V] Starting auto merge of audio and video in folder:', specificFolder);
       mergeInFolder(specificFolder, callback);
     } else {
+	  console.log('[Archived V] Starting auto merge of audio and video in all folders');
       const videosFolders = findVideosFolders(DOWNLOAD_DIR);
       for (const folder of videosFolders) {
         mergeInFolder(folder);
       }
+	  console.log('[Archived V] Auto merge completed for all folders');
     }
   } catch (e) {
     console.error('[Archived V] Error during auto merge:', e.message);
@@ -1594,7 +1546,7 @@ async function checkUpdates() {
           if (download.downloadInfo.channel === ch.id && 
               download.downloadInfo.title === title) {
             isCurrentlyDownloading = true;
-            console.log(`[Archived V] Skipping "${title}" - already downloading (ID: ${downloadId})`);
+            console.log(`[Archived V] Schdueler Skipping "${title}" - already downloading (ID: ${downloadId})`);
             break;
           }
         }
