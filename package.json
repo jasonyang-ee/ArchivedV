@@ -14,7 +14,9 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
-    "build": "vite build",
+    "server:dev": "nodemon --watch server --exec \"node server/index.js\"",
+    "client:dev": "cd client && vite",
+    "build": "cd client && vite build",
     "start": "node server/index.js"
   },
   "dependencies": {
@@ -37,6 +39,7 @@
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.22",
     "concurrently": "^9.2.1",
+    "nodemon": "^3.1.11",
     "postcss": "^8.5.6",
     "vite": "^7.2.6"
   }

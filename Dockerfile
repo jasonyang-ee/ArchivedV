@@ -1,19 +1,12 @@
 FROM node:24-alpine AS builder
 
-WORKDIR /app
-
-# Copy package files
-COPY package*.json ./
-
-# Install dependencies
-RUN npm ci --ignore-scripts
-
 # Copy source code
+WORKDIR /app
 COPY . .
 
-# Build frontend
+# Install dependencies and build
+RUN npm ci --ignore-scripts
 RUN npm run build
-
 
 
 
@@ -44,7 +37,7 @@ RUN node --version && \
 WORKDIR /app
 
 # Copy built frontend and server files
-COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/client/dist ./client/dist
 COPY --from=builder /app/package*.json ./
 COPY server ./server
 

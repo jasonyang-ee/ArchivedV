@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { api } from "../api";
+import { api } from "../utils/api";
 
 function CookieSettings() {
   const [status, setStatus] = useState(null);

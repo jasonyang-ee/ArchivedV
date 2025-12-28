@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { api } from "./api";
+import { api } from "./utils/api.js";
 import Header from "./components/Header";
 import ChannelList from "./components/ChannelList";
 import KeywordList from "./components/KeywordList";
