@@ -9,8 +9,6 @@
 # 3. Updates CHANGELOG.md with the new version section
 # 4. Commits changes, creates git tag, and pushes to remote
 # 5. Creates a GitHub draft release with changelog content
-#
-# Inspired by: https://github.com/pocket-id/pocket-id
 # =============================================================================
 
 set -e

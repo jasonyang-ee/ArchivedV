@@ -9,15 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- 
-
-### Changed
-
-- 
+- Dynamic port configuration via `PORT` environment variable (default: 3000)
+- Links to current downloads in the web UI for better visibility
 
 ### Fixed
 
-- 
+- Multiple checks before running autoMerge to avoid using excess resources
+- Ensure proper db cleanup after download and merge operations
+- Keep logging style consistent across different log messages
 
 ## [1.5.0] - 2025-12-27
 
