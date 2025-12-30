@@ -648,11 +648,15 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
           ? "Partial/incomplete download; retry"
           : "Download failed; retry";
 
+    // upsertRetryJob will do db.read(), but we need to get the attempt count first
     db.read();
     const existing = (db.data.retryQueue || []).find(
       (j) => j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId
     );
     const attempts = (existing?.attempts || 0) + 1;
+    
+    // Store the filtered currentDownloads before upsertRetryJob overwrites it
+    const filteredCurrentDownloads = db.data.currentDownloads;
 
     upsertRetryJob(
       {
@@ -671,6 +675,11 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
         inProgress: false,
       }
     );
+    
+    // Restore and write the filtered currentDownloads (upsertRetryJob may have done a db.read())
+    db.read();
+    db.data.currentDownloads = filteredCurrentDownloads;
+    db.write();
 
     // Try cleaning up only if truly empty
     if (folderState.kind === "empty") {
@@ -688,10 +697,47 @@ async function processRetryQueue() {
     db.read();
     if (!db.data.retryQueue) db.data.retryQueue = [];
 
+    // Deduplicate retry queue by key (keep most recent)
+    const uniqueJobs = new Map();
+    for (const job of db.data.retryQueue) {
+      const existing = uniqueJobs.get(job.key);
+      if (!existing || new Date(job.updatedAt) > new Date(existing.updatedAt)) {
+        uniqueJobs.set(job.key, job);
+      }
+    }
+    if (uniqueJobs.size !== db.data.retryQueue.length) {
+      db.data.retryQueue = Array.from(uniqueJobs.values());
+      db.write();
+      console.log(`[Archived V] Deduplicated retry queue: ${db.data.retryQueue.length} unique jobs`);
+    }
+
     // Refresh counts into status
     status.retryQueue = getRetryQueueCounts();
 
     const ignoreKeywords = (db.data.ignoreKeywords || []).map((k) => k.toLowerCase());
+
+    // Reset stale inProgress flags (jobs marked as inProgress but not actually active)
+    let resetCount = 0;
+    for (const job of db.data.retryQueue) {
+      if (job.inProgress) {
+        let foundActive = false;
+        for (const dl of activeDownloads.values()) {
+          if (dl?.downloadInfo?.channel === job.channelId && dl?.downloadInfo?.videoId === job.videoId) {
+            foundActive = true;
+            break;
+          }
+        }
+        if (!foundActive) {
+          job.inProgress = false;
+          job.updatedAt = nowIso();
+          resetCount++;
+        }
+      }
+    }
+    if (resetCount > 0) {
+      db.write();
+      console.log(`[Archived V] Reset ${resetCount} stale inProgress flag(s) in retry queue`);
+    }
 
     // Start due jobs while capacity allows
     const now = Date.now();
@@ -719,8 +765,12 @@ async function processRetryQueue() {
         }
       }
       if (alreadyActive) {
+        // Mark as in progress and persist to avoid re-attempting
         job.inProgress = true;
         job.updatedAt = nowIso();
+        db.data.retryQueue = db.data.retryQueue.map((j) => (j.key === job.key ? job : j));
+        db.write();
+        console.log(`[Archived V] Skipping retry queue job for "${job.title}" - already downloading`);
         continue;
       }
 
@@ -749,10 +799,8 @@ async function processRetryQueue() {
       db.read();
       db.data.currentDownloads = db.data.currentDownloads || [];
       db.data.currentDownloads.push(downloadInfo);
-      db.write();
-
-      // Persist the inProgress mark
-      db.read();
+      
+      // Persist the inProgress mark in the same write operation
       db.data.retryQueue = db.data.retryQueue.map((j) => (j.key === job.key ? job : j));
       db.write();
 
@@ -1451,11 +1499,20 @@ async function checkUpdates() {
     }
   }
   
-  // Update with deduplicated list if there were duplicates
-  if (uniqueDownloads.length !== db.data.currentDownloads.length) {
-    db.data.currentDownloads = uniqueDownloads;
-    status.currentDownloads = uniqueDownloads;
+  // Also remove currentDownloads that are not in activeDownloads (stale entries)
+  const activeCurrentDownloads = uniqueDownloads.filter(download => {
+    return activeDownloads.has(download.id);
+  });
+  
+  // Update with deduplicated and validated list
+  if (activeCurrentDownloads.length !== db.data.currentDownloads.length) {
+    const removedCount = db.data.currentDownloads.length - activeCurrentDownloads.length;
+    db.data.currentDownloads = activeCurrentDownloads;
+    status.currentDownloads = activeCurrentDownloads;
     db.write();
+    if (removedCount > 0) {
+      console.log(`[Archived V] Removed ${removedCount} stale currentDownloads entry(ies)`);
+    }
   } else {
     status.currentDownloads = db.data.currentDownloads;
   }
