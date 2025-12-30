@@ -48,9 +48,9 @@ RUN npm ci --only=production --ignore-scripts && \
 # Create necessary directories
 RUN mkdir -p /app/data /app/download
 
-# Expose port
+# Set environment variables
+ENV PORT=3000
 ENV NODE_ENV=production
-EXPOSE 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

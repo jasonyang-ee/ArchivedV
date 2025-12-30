@@ -560,6 +560,7 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
     // If killed by 403 loop, treat as stream ended - clean up and mark as complete
     if (tracking.killedBy403Loop) {
       handleDownloadSuccess(dir, downloadInfo, "stream ended");
+      db.write();
       console.log(`[Archived V] Stream ended for "${downloadInfo.title}" - download complete (403 loop detected)`);
       return;
     }
@@ -572,6 +573,7 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
 
     if (code === 0) {
       handleDownloadSuccess(dir, downloadInfo);
+      db.write();
       return;
     }
 
@@ -633,6 +635,7 @@ function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
     // If we ended up with a usable merged file, treat it as success.
     if (folderState.kind === "complete") {
       handleDownloadSuccess(dir, downloadInfo);
+      db.write();
       console.warn(`[Archived V] yt-dlp exited ${code} but produced a usable file for "${downloadInfo.title}"; recording as success.`);
       return;
     }
@@ -907,12 +910,10 @@ function handleDownloadSuccess(dir, downloadInfo, note = null) {
     if (process.env.PUSHOVER_APP_TOKEN && process.env.PUSHOVER_USER_TOKEN) {
       push.send({ message, title: downloadInfo.title }, () => {});
     }
-    db.read();
     db.data.history.push({ title: downloadInfo.title, time: nowIso(), ...(note && { note }) });
     db.data.retryQueue = (db.data.retryQueue || []).filter(
       (j) => !(j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId)
     );
-    db.write();
   });
 }
 
@@ -968,10 +969,16 @@ function findVideosFolders(root) {
 function mergeInFolder(folder, callback = null) {
   try {
     const files = fs.readdirSync(folder);
+    const hasFinalMp4 = files.some(f => f.endsWith('.mp4') && !f.endsWith('.f299.mp4') && !f.endsWith('.f140.mp4'));
+    if (hasFinalMp4) {
+      console.log(`[Archived V] Skipping merge in folder ${folder} - already has final .mp4`);
+      if (callback) callback();
+      return;
+    }
     const titleMap = new Map();
     for (const file of files) {
       if (file.endsWith('.f299.mp4')) {
-        const title = file.slice(0, -9); // remove .f299.mp4
+        const title = file.slice(0, -9);
         if (!titleMap.has(title)) titleMap.set(title, {});
         titleMap.get(title).video = file;
       } else if (file.endsWith('.f140.mp4')) {
@@ -1689,7 +1696,7 @@ startDownloadWatchdog();
 
 app.listen(PORT, () => {
   console.log(`[Archived V] Server running on port ${PORT}`);
-  console.log(`[Archived V] Environment: ${process.env.NODE_ENV || "development"}`);
+  console.log(`[Archived V] Environment: ${process.env.NODE_ENV || "production"}`);
   
   // Run initial check for new streams on startup
   console.log("[Archived V] Initial Checking for New Streams");
