@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- 
+
+### Changed
+
+- 
+
+### Fixed
+
+- 
+
+## [1.5.1] - 2025-12-29
+
+### Added
+
 - Dynamic port configuration via `PORT` environment variable (default: 3000)
 - Links to current downloads in the web UI for better visibility
 
