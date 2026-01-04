@@ -69,7 +69,10 @@ export default function CookieSettings() {
             Members-only Cookies
           </h2>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            For members-only/private videos, yt-dlp needs cookies.txt.
+            For members-only videos
+          </p>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            yt-dlp needs cookies.txt
           </p>
         </div>
         <button

@@ -95,14 +95,14 @@ function StatusDisplay({ status, onRefresh, onCancelDownload }) {
                   key={download.id}
                   className="p-2 bg-white dark:bg-[#2a2a2a] rounded border border-gray-200 dark:border-[#444444] flex items-start gap-2"
                 >
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 gap-2">
                     <div className="text-sm text-gray-900 dark:text-gray-100 font-medium wrap-break-word">
                       {download.title}
 					  <a
                         href={download.videoLink}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
+                        className="text-sm mx-3 text-primary-600 dark:text-primary-400 hover:underline"
                       >
                         View →
                       </a>

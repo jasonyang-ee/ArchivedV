@@ -43,13 +43,16 @@ export default function YtdlpFlagsSettings() {
 
   return (
     <div className="card">
-      <div className="flex items-start justify-between gap-4 mb-2">
+      <div className="flex items-start justify-between gap-4 mb-6">
         <div>
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
             Custom yt-dlp Flags
           </h2>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-            Additional flags to pass to yt-dlp for every download.
+            Additional flags to pass to yt-dlp for every download
+          </p>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            Use with caution as incorrect flags may cause download failures
           </p>
         </div>
       </div>
@@ -68,12 +71,11 @@ export default function YtdlpFlagsSettings() {
 
       <div className="space-y-3">
         <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-          <p className="mb-1">Enter any additional yt-dlp flags, separated by spaces. Examples:</p>
+          <p className="mb-2">Enter any additional yt-dlp flags, separated by spaces</p>
+          <p className="mb-2">Examples:</p>
           <ul className="list-disc list-inside ml-2 space-y-1">
-            <li><code className="bg-gray-100 dark:bg-[#333333] px-1 rounded">--write-thumbnail</code> - Save video thumbnail</li>
             <li><code className="bg-gray-100 dark:bg-[#333333] px-1 rounded">--write-description</code> - Save video description</li>
             <li><code className="bg-gray-100 dark:bg-[#333333] px-1 rounded">--embed-subs</code> - Embed subtitles in video</li>
-            <li><code className="bg-gray-100 dark:bg-[#333333] px-1 rounded">--sub-langs en,ja</code> - Download specific subtitle languages</li>
             <li><code className="bg-gray-100 dark:bg-[#333333] px-1 rounded">--limit-rate 2M</code> - Limit download speed to 2MB/s</li>
           </ul>
         </div>
