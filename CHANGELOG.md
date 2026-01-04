@@ -9,15 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- 
+- Refactored server into modules for better organization
+- Yt-dlp custom flags configuration in web UI and API
 
 ### Changed
 
-- 
+- Supporting best video format and dynamic auto merger to merge interruped downloads for all possible formats
 
 ### Fixed
 
-- 
+- Not forcing 299+140 format for yt-dlp anymore to avoid issue with some streams not having those formats (#9)
+- Security update for dependencies
 
 ## [1.5.1] - 2025-12-29
 

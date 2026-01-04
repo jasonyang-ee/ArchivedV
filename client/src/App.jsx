@@ -5,6 +5,7 @@ import ChannelList from "./components/ChannelList";
 import KeywordList from "./components/KeywordList";
 import IgnoreKeywordList from "./components/IgnoreKeywordList";
 import CookieSettings from "./components/CookieSettings";
+import YtdlpFlagsSettings from "./components/YtdlpFlagsSettings";
 import StatusDisplay from "./components/StatusDisplay";
 import DownloadHistory from "./components/DownloadHistory";
 
@@ -220,6 +221,7 @@ function App() {
               onDeleteKeyword={handleDeleteIgnoreKeyword}
             />
             <CookieSettings />
+            <YtdlpFlagsSettings />
           </div>
 
           {/* Center - Download Status and History */}

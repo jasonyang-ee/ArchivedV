@@ -132,6 +132,21 @@ export const api = {
     });
     return res.json();
   },
+
+  // yt-dlp custom flags
+  async getYtdlpFlags() {
+    const res = await fetch(`${API_BASE}/ytdlp-flags`);
+    return res.json();
+  },
+
+  async setYtdlpFlags(ytdlpFlags) {
+    const res = await fetch(`${API_BASE}/ytdlp-flags`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ytdlpFlags }),
+    });
+    return res.json();
+  },
 };
 
 export default api;
