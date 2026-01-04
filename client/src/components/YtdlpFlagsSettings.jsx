@@ -83,7 +83,7 @@ export default function YtdlpFlagsSettings() {
         <textarea
           value={flags}
           onChange={(e) => setFlags(e.target.value)}
-          placeholder="e.g., --write-thumbnail --write-description --embed-subs"
+          placeholder="e.g., --write-description --embed-subs"
           rows={3}
           className="input w-full font-mono text-sm"
         />

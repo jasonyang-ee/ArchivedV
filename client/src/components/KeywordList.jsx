@@ -36,7 +36,7 @@ function KeywordList({ keywords, onAddKeyword, onDeleteKeyword }) {
               key={keyword}
               className="flex items-start gap-2 p-2 bg-gray-50 dark:bg-[#333333] rounded-lg border border-gray-200 dark:border-[#444444] hover:shadow-md transition-shadow"
             >
-              <span className="text-sm text-gray-900 dark:text-gray-100 font-medium flex-1 wrap-break-word">
+              <span className="text-sm text-gray-900 dark:text-gray-100 font-normal flex-1 wrap-break-word">
                 {keyword}
               </span>
               <button

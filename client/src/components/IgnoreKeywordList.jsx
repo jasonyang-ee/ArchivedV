@@ -36,7 +36,7 @@ function IgnoreKeywordList({ keywords, onAddKeyword, onDeleteKeyword }) {
               key={keyword}
               className="flex items-start gap-2 p-2 bg-gray-50 dark:bg-[#333333] rounded-lg border border-gray-200 dark:border-[#444444] hover:shadow-md transition-shadow"
             >
-              <span className="text-sm text-gray-900 dark:text-gray-100 flex-1 wrap-break-word">{keyword}</span>
+              <span className="text-sm font-normal text-gray-900 dark:text-gray-100 flex-1 wrap-break-word">{keyword}</span>
               <button
                 onClick={() => onDeleteKeyword(keyword)}
                 className="p-0.5 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors shrink-0"
