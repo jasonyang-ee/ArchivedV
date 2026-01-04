@@ -21,6 +21,81 @@ function getFormatId(filename) {
   return match ? match[1] : null;
 }
 
+// Clean up fragment files after successful merge with retry logic
+function cleanupFragmentFiles(folder, title, parts, attempt = 1, maxAttempts = 5) {
+  const filesToDelete = [];
+  
+  // Collect all video fragments
+  for (const vf of parts.videos) {
+    filesToDelete.push(path.join(folder, vf));
+    filesToDelete.push(path.join(folder, vf + '.ytdl'));
+  }
+  
+  // Collect all audio fragments
+  for (const af of parts.audios) {
+    filesToDelete.push(path.join(folder, af));
+    filesToDelete.push(path.join(folder, af + '.ytdl'));
+  }
+  
+  const failedFiles = [];
+  
+  for (const filePath of filesToDelete) {
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (e) {
+      if (e.code === 'EBUSY' || e.code === 'EPERM') {
+        failedFiles.push(filePath);
+      } else {
+        console.warn(`[Archived V] Failed to delete "${path.basename(filePath)}": ${e.message}`);
+      }
+    }
+  }
+  
+  // Retry failed files with exponential backoff
+  if (failedFiles.length > 0 && attempt < maxAttempts) {
+    const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s, 16s...
+    console.log(`[Archived V] Retrying cleanup for "${title}" in ${delay / 1000}s (attempt ${attempt + 1}/${maxAttempts})`);
+    setTimeout(() => {
+      cleanupFragmentFilesRetry(failedFiles, title, attempt + 1, maxAttempts);
+    }, delay);
+  } else if (failedFiles.length > 0) {
+    console.warn(`[Archived V] Could not delete ${failedFiles.length} file(s) for "${title}" after ${maxAttempts} attempts. Files may need manual cleanup.`);
+  }
+}
+
+// Retry cleanup for specific files
+function cleanupFragmentFilesRetry(files, title, attempt, maxAttempts) {
+  const stillFailed = [];
+  
+  for (const filePath of files) {
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (e) {
+      if (e.code === 'EBUSY' || e.code === 'EPERM') {
+        stillFailed.push(filePath);
+      } else {
+        console.warn(`[Archived V] Failed to delete "${path.basename(filePath)}": ${e.message}`);
+      }
+    }
+  }
+  
+  if (stillFailed.length > 0 && attempt < maxAttempts) {
+    const delay = Math.pow(2, attempt) * 1000;
+    console.log(`[Archived V] Retrying cleanup for "${title}" in ${delay / 1000}s (attempt ${attempt + 1}/${maxAttempts})`);
+    setTimeout(() => {
+      cleanupFragmentFilesRetry(stillFailed, title, attempt + 1, maxAttempts);
+    }, delay);
+  } else if (stillFailed.length > 0) {
+    console.warn(`[Archived V] Could not delete ${stillFailed.length} file(s) for "${title}" after ${maxAttempts} attempts: ${stillFailed.map(f => path.basename(f)).join(', ')}`);
+  } else {
+    console.log(`[Archived V] Successfully cleaned up fragment files for "${title}"`);
+  }
+}
+
 // Check if a file is a video fragment (vs audio)
 function isVideoFragment(filename, files) {
   // Common video format IDs (high quality video streams)
@@ -247,39 +322,32 @@ export function mergeInFolder(folder, callback = null) {
       
       try {
         const proc = spawn('ffmpeg', [
+          '-loglevel', 'error',  // Quiet mode - only show errors
+          '-y',                   // Overwrite output without asking
           '-i', path.join(folder, videoFile),
           '-i', path.join(folder, audioFile),
           '-c', 'copy',
           outputPath
-        ], { stdio: 'inherit' });
+        ], { stdio: ['ignore', 'ignore', 'pipe'] }); // Only capture stderr for errors
+        
+        let stderrOutput = '';
+        proc.stderr.on('data', (data) => {
+          stderrOutput += data.toString();
+        });
         
         proc.on('close', (code) => {
           if (code === 0) {
             console.log(`[Archived V] Successfully merged "${title}"`);
             
-            // Remove the parts
-            try {
-              // Remove all video fragments for this title
-              for (const vf of parts.videos) {
-                const vPath = path.join(folder, vf);
-                if (fs.existsSync(vPath)) fs.unlinkSync(vPath);
-                // Also remove .ytdl files if exist
-                const ytdlPath = vPath + '.ytdl';
-                if (fs.existsSync(ytdlPath)) fs.unlinkSync(ytdlPath);
-              }
-              
-              // Remove all audio fragments for this title
-              for (const af of parts.audios) {
-                const aPath = path.join(folder, af);
-                if (fs.existsSync(aPath)) fs.unlinkSync(aPath);
-                const ytdlPath = aPath + '.ytdl';
-                if (fs.existsSync(ytdlPath)) fs.unlinkSync(ytdlPath);
-              }
-            } catch (e) {
-              console.warn(`[Archived V] Failed to clean up parts for "${title}": ${e.message}`);
-            }
+            // Delay cleanup to allow file handles to be released
+            setTimeout(() => {
+              cleanupFragmentFiles(folder, title, parts);
+            }, 1000);
           } else {
             console.error(`[Archived V] Failed to merge "${title}", ffmpeg exit code ${code}`);
+            if (stderrOutput.trim()) {
+              console.error(`[Archived V] ffmpeg error: ${stderrOutput.trim()}`);
+            }
           }
           
           completed++;

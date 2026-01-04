@@ -35,7 +35,7 @@ function ChannelList({ channels, onAddChannel, onDeleteChannel }) {
       </h2>
 
       {/* Channel List */}
-      <div className="space-y-1.5 mb-4 max-h-[1000px] overflow-y-auto">
+      <div className="space-y-1.5 mb-4 max-h-250 overflow-y-auto">
         {sortedChannels.length === 0 ? (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             <p>No channels added yet</p>

@@ -25,7 +25,7 @@ function IgnoreKeywordList({ keywords, onAddKeyword, onDeleteKeyword }) {
       </p>
 
       {/* Keyword List */}
-      <div className="space-y-1.5 mb-4 max-h-[400px] overflow-y-auto">
+      <div className="space-y-1.5 mb-4 max-h-100 overflow-y-auto">
         {sortedKeywords.length === 0 ? (
           <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             <p className="text-sm">No ignore keywords set</p>
@@ -36,10 +36,10 @@ function IgnoreKeywordList({ keywords, onAddKeyword, onDeleteKeyword }) {
               key={keyword}
               className="flex items-start gap-2 p-2 bg-gray-50 dark:bg-[#333333] rounded-lg border border-gray-200 dark:border-[#444444] hover:shadow-md transition-shadow"
             >
-              <span className="text-sm text-gray-900 dark:text-gray-100 flex-1 break-words">{keyword}</span>
+              <span className="text-sm text-gray-900 dark:text-gray-100 flex-1 wrap-break-word">{keyword}</span>
               <button
                 onClick={() => onDeleteKeyword(keyword)}
-                className="p-1 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors flex-shrink-0"
+                className="p-0.5 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors shrink-0"
                 title="Delete keyword"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
