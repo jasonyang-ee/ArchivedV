@@ -342,7 +342,7 @@ export function mergeInFolder(folder, callback = null) {
             // Delay cleanup to allow file handles to be released
             setTimeout(() => {
               cleanupFragmentFiles(folder, title, parts);
-            }, 1000);
+            }, 10000);
           } else {
             console.error(`[Archived V] Failed to merge "${title}", ffmpeg exit code ${code}`);
             if (stderrOutput.trim()) {
