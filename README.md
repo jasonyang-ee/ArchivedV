@@ -14,8 +14,11 @@ The purpose of this project is to save Vtuber singing streams where often are un
 
 1. Automatically check subscribed channels for new live streams.
 2. Download matching videos based on a specified keyword list.
-3. Send notifications via Pushover.
-4. Manage channels and keywords via the web interface.
+3. Manage channels and keywords via the web interface.
+4. Fail safe Auto merger by ffmpeg to combine temperary files when stream end turned to private before yt-dlp can finalize the file.
+5. Send notifications via Pushover.
+6. Support members-only/private videos using cookies.
+7. Custom yt-dlp options for advanced users.
 
 
 ## Screenshot
@@ -69,6 +72,43 @@ services:
     #   - net.ipv6.conf.all.disable_ipv6=1
 ```
 
+
+## Web Interface
+
+Access the web interface at `http://<host_ip>:3000`
+
+
+
+## Data Persistence
+
+Bind mounts to preserve data:
+
+- **Configurations**: `/app/data/db.json`
+- **Downloaded Videos**: `/app/download/<channel_username>/[DateTime] <video_title>/`
+- **Cookies (optional)**: `/app/data/youtube_cookies.txt`
+
+
+
+## Scheduling
+
+A cron job runs every 10 minutes to check for new live streams.
+
+
+
+## Notifications (Optional)
+
+[Pushover](https://pushover.net/) is used to send mobile/desktop notifications on each successful download.
+
+
+
+## Folder Permissions
+
+It is recommended to run the container with a non-root user. The default user ID is `1000`.
+
+Change to the user ID of your host system if necessary. You can do this by modifying the `user` field in the Docker Compose file.
+
+
+
 ## Members-only / Private Videos (Cookies)
 
 Some videos (members-only, private, age-restricted) cannot be downloaded by `yt-dlp` without authentication.
@@ -92,31 +132,18 @@ After cookies are saved/enabled, the service can download members-only/private v
 
 Security note: `cookies.txt` contains your account session. Only use this on a trusted machine.
 
-## Web Interface
 
-Access the web interface at `http://<host_ip>:3000`
 
-## Data Persistence
+## Custom YT-DLP Options
 
-Bind mounts to preserve data:
+You can append custom `yt-dlp` options in the web interface, the same way as you would run `yt-dlp` from the command line.
 
-- **Configurations**: `/app/data/db.json`
-- **Downloaded Videos**: `/app/download/<channel_username>/[DateTime] <video_title>/`
-- **Cookies (optional)**: `/app/data/youtube_cookies.txt`
+Refer to the [yt-dlp documentation](https://github.com/yt-dlp/yt-dlp?tab=readme-ov-file#usage-and-options) for available options.
 
-## Scheduling
+Using custom options may affect the download behavior. Use with caution.
 
-A cron job runs every 10 minutes to check for new live streams.
 
-## Notifications (Optional)
 
-[Pushover](https://pushover.net/) is used to send mobile/desktop notifications on each successful download.
-
-## Folder Permissions
-
-It is recommended to run the container with a non-root user. The default user ID is `1000`.
-
-Change to the user ID of your host system if necessary. You can do this by modifying the `user` field in the Docker Compose file.
 
 ## Potential Issues
 
@@ -128,6 +155,8 @@ Change to the user ID of your host system if necessary. You can do this by modif
 	```
 
 - Axios need ipv4 to work properly. Force ipv4 dns resolution by adding the following to your docker compose file:
+  
+	> Docker Compose Example
 	```yaml
 	sysctls:
 	- net.ipv6.conf.all.disable_ipv6=1
