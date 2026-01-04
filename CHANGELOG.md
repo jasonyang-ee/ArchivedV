@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- 
+
+### Changed
+
+- 
+
+### Fixed
+
+- 
+
+## [1.6.0] - 2026-01-04
+
+### Added
+
 - Refactored server into modules for better organization
 - Yt-dlp custom flags configuration in web UI and API
 - Merger to have auto cleanup of folder fragment files after merge with delay to ensure file handles are released
