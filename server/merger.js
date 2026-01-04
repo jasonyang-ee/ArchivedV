@@ -25,16 +25,40 @@ function getFormatId(filename) {
 function cleanupFragmentFiles(folder, title, parts, attempt = 1, maxAttempts = 5) {
   const filesToDelete = [];
   
-  // Collect all video fragments
+  // Get all files in folder for scanning frag files
+  let folderFiles = [];
+  try {
+    folderFiles = fs.readdirSync(folder);
+  } catch (e) {
+    console.warn(`[Archived V] Failed to read folder for cleanup: ${e.message}`);
+  }
+  
+  // Collect all video fragments and their related files
   for (const vf of parts.videos) {
     filesToDelete.push(path.join(folder, vf));
     filesToDelete.push(path.join(folder, vf + '.ytdl'));
+    
+    // Find any -Frag### files for this fragment
+    const fragPattern = vf + '-Frag';
+    for (const file of folderFiles) {
+      if (file.startsWith(fragPattern)) {
+        filesToDelete.push(path.join(folder, file));
+      }
+    }
   }
   
-  // Collect all audio fragments
+  // Collect all audio fragments and their related files
   for (const af of parts.audios) {
     filesToDelete.push(path.join(folder, af));
     filesToDelete.push(path.join(folder, af + '.ytdl'));
+    
+    // Find any -Frag### files for this fragment
+    const fragPattern = af + '-Frag';
+    for (const file of folderFiles) {
+      if (file.startsWith(fragPattern)) {
+        filesToDelete.push(path.join(folder, file));
+      }
+    }
   }
   
   const failedFiles = [];
@@ -342,7 +366,7 @@ export function mergeInFolder(folder, callback = null) {
             // Delay cleanup to allow file handles to be released
             setTimeout(() => {
               cleanupFragmentFiles(folder, title, parts);
-            }, 10000);
+            }, 1000);
           } else {
             console.error(`[Archived V] Failed to merge "${title}", ffmpeg exit code ${code}`);
             if (stderrOutput.trim()) {
