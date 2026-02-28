@@ -14,6 +14,7 @@ const db = {
     history: [],
     currentDownloads: [],
     retryQueue: [],
+    scheduledStreams: [],
     dateFormat: 'YYYY-MM-DD',
     auth: { useCookies: false },
     ytdlpFlags: '',
@@ -28,6 +29,7 @@ const db = {
         history: [],
         currentDownloads: [],
         retryQueue: [],
+        scheduledStreams: [],
         dateFormat: 'YYYY-MM-DD',
         auth: { useCookies: false },
         ytdlpFlags: '',
@@ -43,6 +45,7 @@ const db = {
         if (!this.data.ignoreKeywords) this.data.ignoreKeywords = [];
         if (!this.data.dateFormat) this.data.dateFormat = 'YYYY-MM-DD';
         if (!this.data.retryQueue) this.data.retryQueue = [];
+        if (!this.data.scheduledStreams) this.data.scheduledStreams = [];
         if (!this.data.auth) this.data.auth = { useCookies: false };
         if (typeof this.data.auth.useCookies !== "boolean") this.data.auth.useCookies = false;
         if (typeof this.data.ytdlpFlags !== "string") this.data.ytdlpFlags = '';
@@ -78,6 +81,7 @@ const db = {
           history: [],
           currentDownloads: [],
           retryQueue: [],
+          scheduledStreams: [],
           dateFormat: 'YYYY-MM-DD',
           auth: { useCookies: false },
           ytdlpFlags: '',

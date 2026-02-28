@@ -89,6 +89,14 @@ export const api = {
     return res.json();
   },
 
+  // Scheduled Streams
+  async removeScheduledStream(videoId) {
+    const res = await fetch(`${API_BASE}/scheduled-streams/${encodeURIComponent(videoId)}`, {
+      method: "DELETE",
+    });
+    return res.json();
+  },
+
   // History
   async getHistory() {
     const res = await fetch(`${API_BASE}/history`);

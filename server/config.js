@@ -29,6 +29,13 @@ export const FEED_FETCH_BACKOFF_MS = Number(process.env.FEED_FETCH_BACKOFF_MS) |
 export const FEED_404_LOG_INTERVAL_MS = 60 * 60 * 1000; // Only re-log after 1 hour
 export const FEED_CHANNEL_DELAY_MS = Number(process.env.FEED_CHANNEL_DELAY_MS) || 1500; // Delay between channel RSS fetches to avoid rate-limiting
 
+// Feed batch settings (stagger to avoid rate-limiting)
+export const FEED_BATCH_SIZE = Number(process.env.FEED_BATCH_SIZE) || 5; // Channels per batch
+export const FEED_BATCH_PAUSE_MS = Number(process.env.FEED_BATCH_PAUSE_MS) || 2000; // Extra pause between batches
+
+// Scheduled stream settings
+export const SCHEDULED_STREAM_LEAD_TIME_MS = Number(process.env.SCHEDULED_STREAM_LEAD_TIME_MS) || 5 * 60 * 1000; // 5 min before scheduled time
+
 // Retry queue settings
 export const RETRY_BASE_DELAY_MS = Number(process.env.RETRY_BASE_DELAY_MS) || 2 * 60 * 1000;
 export const RETRY_MAX_DELAY_MS = Number(process.env.RETRY_MAX_DELAY_MS) || 60 * 60 * 1000;
@@ -76,6 +83,9 @@ export default {
   FEED_FETCH_BACKOFF_MS,
   FEED_404_LOG_INTERVAL_MS,
   FEED_CHANNEL_DELAY_MS,
+  FEED_BATCH_SIZE,
+  FEED_BATCH_PAUSE_MS,
+  SCHEDULED_STREAM_LEAD_TIME_MS,
   RETRY_BASE_DELAY_MS,
   RETRY_MAX_DELAY_MS,
   DOWNLOAD_WATCHDOG_INTERVAL_MS,

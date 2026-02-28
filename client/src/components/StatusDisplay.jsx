@@ -1,8 +1,27 @@
 import React from "react";
 import { formatDate } from "../utils/utils";
 
-function StatusDisplay({ status, onRefresh, onCancelDownload }) {
+function formatRelativeTime(isoString) {
+  try {
+    const target = new Date(isoString).getTime();
+    const now = Date.now();
+    const diff = target - now;
+    if (diff <= 0) return "any moment now";
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 60) return `in ${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    const remMinutes = minutes % 60;
+    if (hours < 24) return remMinutes > 0 ? `in ${hours}h ${remMinutes}m` : `in ${hours}h`;
+    const days = Math.floor(hours / 24);
+    return `in ${days}d ${hours % 24}h`;
+  } catch {
+    return "";
+  }
+}
+
+function StatusDisplay({ status, onRefresh, onCancelDownload, onRemoveScheduledStream }) {
   const currentDownloads = status.currentDownloads || [];
+  const scheduledStreams = status.scheduledStreams || [];
   const isDownloading = currentDownloads.length > 0;
 
   return (
@@ -142,6 +161,76 @@ function StatusDisplay({ status, onRefresh, onCancelDownload }) {
             </div>
           )}
         </div>
+
+        {/* Scheduled Streams */}
+        {scheduledStreams.length > 0 && (
+          <div className="p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
+            <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Scheduled Streams:
+              <span className="text-xs text-purple-600 dark:text-purple-400 font-semibold ml-2">
+                ({scheduledStreams.length})
+              </span>
+            </div>
+            <div className="space-y-2">
+              {scheduledStreams.map((stream) => (
+                <div
+                  key={stream.videoId}
+                  className="p-2 bg-white dark:bg-[#2a2a2a] rounded border border-gray-200 dark:border-[#444444] flex items-start gap-2"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-gray-900 dark:text-gray-100 font-medium wrap-break-word">
+                      {stream.title}
+                      <a
+                        href={stream.videoLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm mx-3 text-primary-600 dark:text-primary-400 hover:underline"
+                      >
+                        View →
+                      </a>
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Channel: {stream.channelName || stream.username} • Starts: {formatDate(stream.scheduledFor)}
+                      <span className="ml-2 text-purple-600 dark:text-purple-400 font-medium">
+                        ({formatRelativeTime(stream.scheduledFor)})
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* Clock icon */}
+                    <svg
+                      className="w-5 h-5 text-purple-500 dark:text-purple-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Remove scheduled stream: ${stream.title}?`)) {
+                          onRemoveScheduledStream(stream.videoId);
+                        }
+                      }}
+                      className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700/30 dark:hover:bg-gray-700/50 rounded-lg transition-colors border border-gray-300 dark:border-gray-600"
+                      title="Remove scheduled stream"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 text-xs text-gray-500 dark:text-gray-500">
+              Downloads will start automatically 5 minutes before the scheduled time.
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

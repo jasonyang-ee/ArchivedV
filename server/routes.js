@@ -357,7 +357,11 @@ router.post("/api/date-format", (req, res) => {
 
 // API: Get status
 router.get("/api/status", (req, res) => {
-  res.json(status);
+  db.read();
+  res.json({
+    ...status,
+    scheduledStreams: db.data.scheduledStreams || [],
+  });
 });
 
 // API: Cancel download
@@ -425,6 +429,22 @@ router.delete("/api/downloads/:downloadId", (req, res) => {
 router.get("/api/history", (req, res) => {
   db.read();
   res.json(db.data.history || []);
+});
+
+// API: Remove scheduled stream
+router.delete("/api/scheduled-streams/:videoId", (req, res) => {
+  const { videoId } = req.params;
+  db.read();
+  if (!db.data.scheduledStreams) db.data.scheduledStreams = [];
+  const before = db.data.scheduledStreams.length;
+  db.data.scheduledStreams = db.data.scheduledStreams.filter((s) => s.videoId !== videoId);
+  if (db.data.scheduledStreams.length < before) {
+    db.write();
+    console.log(`[INFO] [Archived V] Removed scheduled stream: ${videoId}`);
+    res.json({ success: true });
+  } else {
+    res.status(404).json({ error: "Scheduled stream not found" });
+  }
 });
 
 // API: Clear history

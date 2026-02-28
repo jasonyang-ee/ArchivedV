@@ -14,6 +14,7 @@ import {
   getRetryQueueCounts,
   inspectDownloadFolder,
   upsertRetryJob,
+  isScheduledStream,
   startYtDlp,
 } from "./downloader.js";
 import {
@@ -22,6 +23,9 @@ import {
   FEED_FETCH_BACKOFF_MS,
   FEED_404_LOG_INTERVAL_MS,
   FEED_CHANNEL_DELAY_MS,
+  FEED_BATCH_SIZE,
+  FEED_BATCH_PAUSE_MS,
+  SCHEDULED_STREAM_LEAD_TIME_MS,
   AXIOS_TIMEOUT_MS,
 } from "./config.js";
 
@@ -56,6 +60,62 @@ function shouldLogFeed404(channelId) {
 
 function clearFeed404(channelId) {
   feed404Cache.delete(channelId);
+}
+
+// Fisher-Yates shuffle (in-place)
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Process scheduled streams: promote to retry queue when near their start time
+export async function processScheduledStreams() {
+  db.read();
+  if (!db.data.scheduledStreams || db.data.scheduledStreams.length === 0) return;
+
+  const now = Date.now();
+  const promoted = [];
+  const kept = [];
+
+  for (const stream of db.data.scheduledStreams) {
+    const scheduledTime = new Date(stream.scheduledFor).getTime();
+    const timeUntilStart = scheduledTime - now;
+
+    if (timeUntilStart <= SCHEDULED_STREAM_LEAD_TIME_MS) {
+      // Time to start checking — promote to retry queue
+      promoted.push(stream);
+    } else {
+      kept.push(stream);
+    }
+  }
+
+  if (promoted.length > 0) {
+    db.data.scheduledStreams = kept;
+    db.write();
+
+    for (const stream of promoted) {
+      console.log(
+        `[INFO] [Archived V] Promoting scheduled stream to download queue: "${stream.title}"`
+      );
+      upsertRetryJob(
+        {
+          channelId: stream.channelId,
+          videoId: stream.videoId,
+          title: stream.title,
+          username: stream.username,
+          channelName: stream.channelName,
+          videoLink: stream.videoLink,
+        },
+        {
+          nextAttemptAt: nowIso(),
+          inProgress: false,
+        }
+      );
+    }
+  }
 }
 
 // Headers for YouTube RSS feed requests.
@@ -273,18 +333,29 @@ export async function checkUpdates() {
     const keywords = db.data.keywords.map((k) => k.toLowerCase());
     const ignoreKeywords = (db.data.ignoreKeywords || []).map((k) => k.toLowerCase());
 
-    // Kick retry queue first so failed/partial work gets priority.
+    // Kick retry queue and process scheduled streams first so failed/partial work gets priority.
+    await processScheduledStreams();
     await processRetryQueue();
 
     let feedSuccessCount = 0;
     let feedFailCount = 0;
 
-    for (let i = 0; i < channels.length; i++) {
-      const ch = channels[i];
+    // Shuffle channel order each cycle to distribute rate-limit impact
+    const shuffledChannels = shuffleArray([...channels]);
+    // Track adaptive delay: increase on failures, reset on success
+    let currentDelay = FEED_CHANNEL_DELAY_MS;
+
+    for (let i = 0; i < shuffledChannels.length; i++) {
+      const ch = shuffledChannels[i];
       try {
-        // Throttle between channel requests to avoid YouTube rate-limiting (which returns 404)
+        // Throttle between channel requests with adaptive delay
         if (i > 0) {
-          await sleep(jitter(FEED_CHANNEL_DELAY_MS));
+          await sleep(jitter(currentDelay));
+        }
+
+        // Extra pause between batches to create natural gaps
+        if (i > 0 && i % FEED_BATCH_SIZE === 0) {
+          await sleep(jitter(FEED_BATCH_PAUSE_MS));
         }
 
         // Validate URL before making request to prevent SSRF
@@ -297,6 +368,8 @@ export async function checkUpdates() {
         // Feed succeeded - clear any 404 suppression for this channel
         clearFeed404(ch.id);
         feedSuccessCount++;
+        // Reset adaptive delay on success
+        currentDelay = FEED_CHANNEL_DELAY_MS;
 
         const result = await xmlParser.parseStringPromise(xml);
         const entries = result.feed.entry || [];
@@ -378,6 +451,11 @@ export async function checkUpdates() {
             continue;
           }
 
+          // Skip if already tracked as a scheduled stream
+          if (isScheduledStream(ch.id, videoId)) {
+            continue;
+          }
+
           // CHECK 1: Is this video currently being downloaded by an active process?
           for (const [downloadId, download] of activeDownloads.entries()) {
             if (download.downloadInfo.channel === ch.id && download.downloadInfo.title === title) {
@@ -450,6 +528,8 @@ export async function checkUpdates() {
         }
       } catch (e) {
         feedFailCount++;
+        // Increase adaptive delay on failure (cap at 5000ms)
+        currentDelay = Math.min(5000, Math.ceil(currentDelay * 1.5));
         const { statusCode, code, message } = normalizeError(e);
         if (statusCode === 404) {
           // Only log first occurrence, then suppress for 1 hour to reduce log spam
@@ -483,6 +563,7 @@ export async function checkUpdates() {
     status.lastRun = new Date().toISOString();
 
     // Try starting any newly enqueued jobs.
+    await processScheduledStreams();
     await processRetryQueue();
 
     let total = 0;
@@ -515,8 +596,9 @@ export function startScheduler() {
     checkUpdates().catch((err) => console.error("[ERROR] [Archived V] Cron error:", err));
   });
 
-  // Start retry queue scheduler - every minute
+  // Start retry queue scheduler - every minute (also checks scheduled streams for promotion)
   setInterval(() => {
+    processScheduledStreams().catch((err) => console.error("[ERROR] [Archived V] Scheduled streams error:", err));
     processRetryQueue().catch((err) => console.error("[ERROR] [Archived V] Retry queue error:", err));
   }, 60 * 1000);
 }
@@ -531,6 +613,7 @@ export function runInitialCheck() {
 
 export default {
   processRetryQueue,
+  processScheduledStreams,
   checkUpdates,
   startScheduler,
   runInitialCheck,

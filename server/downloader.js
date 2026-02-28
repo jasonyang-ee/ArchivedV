@@ -25,6 +25,7 @@ import {
   DOWNLOAD_WATCHDOG_INTERVAL_MS,
   DOWNLOAD_WATCHDOG_NO_OUTPUT_MS,
   DOWNLOAD_WATCHDOG_MIN_RUNTIME_MS,
+  SCHEDULED_STREAM_LEAD_TIME_MS,
   PUSHOVER_APP_TOKEN,
   PUSHOVER_USER_TOKEN,
 } from "./config.js";
@@ -105,6 +106,94 @@ export function computeNextAttempt(attempts) {
   const exp = Math.min(10, Math.max(0, attempts));
   const delay = Math.min(RETRY_MAX_DELAY_MS, RETRY_BASE_DELAY_MS * Math.pow(2, exp));
   return new Date(Date.now() + jitter(delay)).toISOString();
+}
+
+// --- Scheduled Stream helpers ---
+
+/**
+ * Parse yt-dlp's "This live event will begin in ..." message to extract the scheduled start time.
+ * Returns an ISO timestamp, or null if unparseable.
+ */
+export function parseScheduledTime(stderr) {
+  // Match patterns like:
+  //   "This live event will begin in 4 hours."
+  //   "This live event will begin in about 2 hours."
+  //   "This live event will begin in 30 minutes."
+  //   "This live event will begin in 1 day."
+  const match = stderr.match(
+    /This live event will begin in (?:about )?(\d+)\s+(minute|hour|day)s?/i
+  );
+  if (!match) return null;
+
+  const amount = parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+  let ms = 0;
+  if (unit === "minute") ms = amount * 60 * 1000;
+  else if (unit === "hour") ms = amount * 60 * 60 * 1000;
+  else if (unit === "day") ms = amount * 24 * 60 * 60 * 1000;
+
+  return new Date(Date.now() + ms).toISOString();
+}
+
+/**
+ * Add or update a scheduled stream entry. Removes from retryQueue if present.
+ */
+export function addScheduledStream(info, scheduledFor) {
+  db.read();
+  if (!db.data.scheduledStreams) db.data.scheduledStreams = [];
+
+  const key = makeRetryKey(info.channelId, info.videoId);
+
+  // Remove from retry queue
+  db.data.retryQueue = (db.data.retryQueue || []).filter(
+    (j) => !(j.channelId === info.channelId && j.videoId === info.videoId)
+  );
+
+  // Upsert into scheduledStreams
+  const idx = db.data.scheduledStreams.findIndex((s) => s.key === key);
+  const entry = {
+    key,
+    channelId: info.channelId || info.channel,
+    videoId: info.videoId,
+    title: info.title,
+    username: info.username,
+    channelName: info.channelName,
+    videoLink: info.videoLink,
+    scheduledFor,
+    detectedAt: idx === -1 ? nowIso() : db.data.scheduledStreams[idx].detectedAt,
+    lastCheckedAt: nowIso(),
+  };
+
+  if (idx === -1) {
+    db.data.scheduledStreams.push(entry);
+    console.log(
+      `[INFO] [Archived V] Scheduled stream detected: "${info.title}" starts at ${new Date(scheduledFor).toISOString()}`
+    );
+  } else {
+    db.data.scheduledStreams[idx] = entry;
+  }
+
+  db.write();
+  return entry;
+}
+
+/**
+ * Check if a video is already tracked as a scheduled stream.
+ */
+export function isScheduledStream(channelId, videoId) {
+  db.read();
+  if (!db.data.scheduledStreams) return false;
+  return db.data.scheduledStreams.some(
+    (s) => s.channelId === channelId && s.videoId === videoId
+  );
+}
+
+/**
+ * Get count of scheduled streams.
+ */
+export function getScheduledStreamCounts() {
+  db.read();
+  return (db.data.scheduledStreams || []).length;
 }
 
 export function upsertRetryJob(job, update = {}) {
@@ -190,6 +279,10 @@ function handleDownloadSuccess(dir, downloadInfo, note = null) {
     db.data.history.push({ title: downloadInfo.title, time: nowIso(), ...(note && { note }) });
     db.data.retryQueue = (db.data.retryQueue || []).filter(
       (j) => !(j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId)
+    );
+    // Also clean up from scheduledStreams if it was promoted
+    db.data.scheduledStreams = (db.data.scheduledStreams || []).filter(
+      (s) => !(s.channelId === downloadInfo.channel && s.videoId === downloadInfo.videoId)
     );
     db.write();
   });
@@ -454,7 +547,39 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
     }
 
     // Soft-failure cases should be retried.
-    const retryReason = stderr.includes("This live event will begin")
+    const isScheduledLiveEvent = stderr.includes("This live event will begin");
+
+    // If this is a scheduled live event, move to scheduledStreams instead of retryQueue
+    if (isScheduledLiveEvent) {
+      const scheduledFor = parseScheduledTime(stderr);
+      if (scheduledFor) {
+        addScheduledStream(
+          {
+            channelId: downloadInfo.channel,
+            videoId: downloadInfo.videoId,
+            title: downloadInfo.title,
+            username: downloadInfo.username,
+            channelName: downloadInfo.channelName,
+            videoLink,
+          },
+          scheduledFor
+        );
+
+        // Restore filtered currentDownloads
+        db.read();
+        db.data.currentDownloads = (db.data.currentDownloads || []).filter((d) => d.id !== downloadId);
+        db.write();
+
+        // Clean up empty folder if one was created
+        if (folderState.kind === "empty") {
+          safeCleanupDirectory(dir, "scheduled stream (not yet live)");
+        }
+        return;
+      }
+      // If we couldn't parse the time, fall through to normal retry
+    }
+
+    const retryReason = isScheduledLiveEvent
       ? "Live scheduled; retry later"
       : folderState.kind === "incomplete"
         ? "Partial/incomplete download; retry"
@@ -589,6 +714,10 @@ export default {
   inspectDownloadFolder,
   makeRetryKey,
   computeNextAttempt,
+  parseScheduledTime,
+  addScheduledStream,
+  isScheduledStream,
+  getScheduledStreamCounts,
   upsertRetryJob,
   safeCleanupDirectory,
   startYtDlp,

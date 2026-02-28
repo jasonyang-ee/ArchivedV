@@ -170,6 +170,15 @@ function App() {
     }
   }
 
+  async function handleRemoveScheduledStream(videoId) {
+    try {
+      await api.removeScheduledStream(videoId);
+      await loadStatus();
+    } catch (err) {
+      console.error("Failed to remove scheduled stream:", err);
+    }
+  }
+
   async function handleClearHistory() {
     if (!window.confirm("Are you sure you want to clear the download history?")) {
       return;
@@ -226,10 +235,11 @@ function App() {
 
           {/* Center - Download Status and History */}
           <div className="space-y-6 min-w-0">
-            <StatusDisplay 
-              status={status} 
+            <StatusDisplay
+              status={status}
               onRefresh={handleRefresh}
               onCancelDownload={handleCancelDownload}
+              onRemoveScheduledStream={handleRemoveScheduledStream}
             />
             <DownloadHistory history={history} onClearHistory={handleClearHistory} />
           </div>
