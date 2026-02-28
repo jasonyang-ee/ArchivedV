@@ -21,6 +21,7 @@ import {
   FEED_FETCH_RETRIES,
   FEED_FETCH_BACKOFF_MS,
   FEED_404_LOG_INTERVAL_MS,
+  FEED_CHANNEL_DELAY_MS,
   AXIOS_TIMEOUT_MS,
 } from "./config.js";
 
@@ -80,7 +81,7 @@ async function fetchFeedWithRetry(url, channelLabel = "") {
       }
       const delay = jitter(FEED_FETCH_BACKOFF_MS * Math.pow(2, attempt));
       console.warn(
-        `[WARN] [Archived V] Feed fetch retry ${attempt + 1}/${FEED_FETCH_RETRIES} for ${channelLabel || url} after ${delay}ms (${code || statusCode || "error"})`
+        `[WARN] [Archived V] Feed fetch retry ${attempt + 1}/${FEED_FETCH_RETRIES} for ${channelLabel || url} after ${delay}ms (${statusCode || code || "error"})`
       );
       await sleep(delay);
     }
@@ -266,8 +267,14 @@ export async function checkUpdates() {
     // Kick retry queue first so failed/partial work gets priority.
     await processRetryQueue();
 
-    for (const ch of channels) {
+    for (let i = 0; i < channels.length; i++) {
+      const ch = channels[i];
       try {
+        // Throttle between channel requests to avoid YouTube rate-limiting (which returns 404)
+        if (i > 0) {
+          await sleep(jitter(FEED_CHANNEL_DELAY_MS));
+        }
+
         // Validate URL before making request to prevent SSRF
         if (!isValidYouTubeUrl(ch.link)) {
           console.error(`[ERROR] [Archived V] Skipping invalid channel URL: ${ch.link}`);

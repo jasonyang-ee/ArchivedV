@@ -27,6 +27,7 @@ export const AUTH_SKIP_CACHE_MAX = Number(process.env.AUTH_SKIP_CACHE_MAX) || 20
 export const FEED_FETCH_RETRIES = Number(process.env.FEED_FETCH_RETRIES) || 3;
 export const FEED_FETCH_BACKOFF_MS = Number(process.env.FEED_FETCH_BACKOFF_MS) || 1000;
 export const FEED_404_LOG_INTERVAL_MS = 60 * 60 * 1000; // Only re-log after 1 hour
+export const FEED_CHANNEL_DELAY_MS = Number(process.env.FEED_CHANNEL_DELAY_MS) || 1500; // Delay between channel RSS fetches to avoid rate-limiting
 
 // Retry queue settings
 export const RETRY_BASE_DELAY_MS = Number(process.env.RETRY_BASE_DELAY_MS) || 2 * 60 * 1000;
@@ -66,6 +67,7 @@ export default {
   FEED_FETCH_RETRIES,
   FEED_FETCH_BACKOFF_MS,
   FEED_404_LOG_INTERVAL_MS,
+  FEED_CHANNEL_DELAY_MS,
   RETRY_BASE_DELAY_MS,
   RETRY_MAX_DELAY_MS,
   DOWNLOAD_WATCHDOG_INTERVAL_MS,

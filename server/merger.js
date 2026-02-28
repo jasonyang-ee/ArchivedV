@@ -343,7 +343,29 @@ export function mergeInFolder(folder, callback = null) {
       }
       
       console.log(`[INFO] [Archived V] Merging video "${videoFile}" + audio "${audioFile}" -> "${output}"`);
-      
+
+      // Pre-check: skip merge if any fragment is corrupt (< 1KB)
+      const corruptThreshold = 1024;
+      let hasCorrupt = false;
+      const allFrags = [...parts.videos, ...parts.audios];
+      for (const frag of allFrags) {
+        const fragPath = path.join(folder, frag);
+        try {
+          const stat = fs.statSync(fragPath);
+          if (stat.size < corruptThreshold) {
+            fs.unlinkSync(fragPath);
+            console.log(`[INFO] [Archived V] Deleted corrupt fragment "${frag}" (${stat.size} bytes) to allow re-download`);
+            try { fs.unlinkSync(fragPath + '.ytdl'); } catch {}
+            hasCorrupt = true;
+          }
+        } catch {}
+      }
+      if (hasCorrupt) {
+        completed++;
+        if (completed === titleParts.length && callback) callback();
+        continue;
+      }
+
       try {
         const proc = spawn('ffmpeg', [
           '-loglevel', 'error',  // Quiet mode - only show errors

@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- RSS feed 404 for all channels caused by rapid-fire requests triggering YouTube rate-limiting; added configurable throttle delay (`FEED_CHANNEL_DELAY_MS`, default 1.5s) between channel feed fetches
+- Feed fetch retry log showed `ERR_BAD_RESPONSE` instead of the actual HTTP status code
+- Auto-merge attempted ffmpeg on 0-byte corrupt fragments at startup, causing many unnecessary failures; now pre-checks file sizes and deletes corrupt fragments before invoking ffmpeg
 - Cookie-enabled deployments never saved videos: YouTube returns `"Video unavailable. This video is private"` when cookies are active (not `"Private video. Sign in..."`) — auth classifier now handles both forms
 - 403 loop detection never triggered: was tracking per-fragment number, but video+audio streams interleave different fragment numbers; now counts all consecutive 403s globally
 - Corrupt fragments (<1KB) after a failed merge permanently blocked yt-dlp re-download; now auto-deleted on merge failure
