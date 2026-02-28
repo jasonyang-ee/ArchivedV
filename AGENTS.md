@@ -1,10 +1,6 @@
 ## Development Workflow
 
 - `./start.sh` installs deps, builds, creates data/download dirs, runs dev servers.
-- `npm run dev` starts backend (nodemon) and frontend (vite) concurrently.
-- `npm run build` builds the React client into `client/dist/`.
-- `npm start` runs production server only.
-- `./release.sh` auto-detects version bump from conventional commits, updates CHANGELOG.md, tags, and creates GitHub release.
 
 ## Project Structure
 
@@ -25,11 +21,7 @@ ArchivedV/
       App.jsx
       components/   # ChannelList, KeywordList, StatusDisplay, CookieSettings, etc.
       utils/        # api.js (HTTP client), utils.js
-  data/             # Runtime: db.json, youtube_cookies.txt
-  download/         # Runtime: downloaded videos organized by channel
   doc/              # Logo and screenshot assets
-  .github/          # CI/CD workflows, dependabot, contributing guide
-  .devcontainer/    # VS Code dev container config
 ```
 
 ## Technology Stack
