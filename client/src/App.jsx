@@ -4,7 +4,7 @@ import Header from "./components/Header";
 import ChannelList from "./components/ChannelList";
 import KeywordList from "./components/KeywordList";
 import IgnoreKeywordList from "./components/IgnoreKeywordList";
-import CookieSettings from "./components/CookieSettings";
+// import CookieSettings from "./components/CookieSettings"; // TODO: Re-enable when cookie feature is complete
 import YtdlpFlagsSettings from "./components/YtdlpFlagsSettings";
 import StatusDisplay from "./components/StatusDisplay";
 import DownloadHistory from "./components/DownloadHistory";
@@ -229,7 +229,7 @@ function App() {
               onAddKeyword={handleAddIgnoreKeyword}
               onDeleteKeyword={handleDeleteIgnoreKeyword}
             />
-            <CookieSettings />
+            {/* <CookieSettings /> */}{/* TODO: Re-enable when cookie feature is complete */}
             <YtdlpFlagsSettings />
           </div>
 
