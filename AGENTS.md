@@ -59,19 +59,6 @@ Single-process Node.js server with these subsystems:
 - yt-dlp is called with `--no-part`, `--skip-unavailable-fragments`, `--fragment-retries 50`, `-f bestvideo+bestaudio/best`.
 - On merge failure, corrupt fragments (<1KB) are auto-deleted to unblock yt-dlp re-download.
 
-## API Routes
-
-All routes are under `/api`. Key endpoints:
-- `GET/POST /api/channels` - Manage monitored YouTube channels
-- `GET/POST /api/keywords` - Manage title match keywords
-- `GET/POST /api/ignore-keywords` - Manage exclusion keywords
-- `GET/POST /api/auth` - Toggle cookie auth; `PUT/DELETE /api/auth/cookies` - Upload/remove cookies.txt
-- `GET /api/status` - Current downloads, retry queue, last run
-- `GET /api/history` - Download history
-- `POST /api/ytdlp-flags` - Set custom yt-dlp CLI flags
-- `POST /api/trigger-check` - Force immediate feed check
-- `POST /api/trigger-merge` - Force immediate merge scan
-
 ## Code Style
 
 - ES Modules (`import/export`) throughout, `"type": "module"` in package.json.
@@ -79,14 +66,3 @@ All routes are under `/api`. Key endpoints:
 - File naming: `camelCase.js` for server modules, `PascalCase.jsx` for React components.
 - `CHANGELOG.md` maintained for the `## [Unreleased]` section. Consolidate multi-step fixes into one entry.
 
-## Environment Variables
-
-All optional with sensible defaults. Key ones:
-- `PORT` (3000), `TZ`, `NODE_ENV`
-- `YTDLP_COOKIES_PATH` (default: `data/youtube_cookies.txt`)
-- `MAX_CONCURRENT_DOWNLOADS` (0=unlimited)
-- `PUSHOVER_APP_TOKEN`, `PUSHOVER_USER_TOKEN`
-- `RETRY_BASE_DELAY_MS` (120000), `RETRY_MAX_DELAY_MS` (3600000)
-- `DOWNLOAD_WATCHDOG_NO_OUTPUT_MS` (7200000)
-
-See `server/config.js` for the full list.
