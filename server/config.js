@@ -46,8 +46,16 @@ export const AXIOS_TIMEOUT_MS = Number(process.env.AXIOS_TIMEOUT_MS) || 20000;
 export const STATIC_RATELIMIT_MAX = Number(process.env.STATIC_RATELIMIT_MAX) || 600;
 export const AUTH_RATELIMIT_MAX = Number(process.env.AUTH_RATELIMIT_MAX) || 60;
 
-// Trust proxy setting
+// Trust proxy setting (default: 1 — trust first proxy hop, typical for Docker/reverse proxy)
 export const TRUST_PROXY_RAW = process.env.TRUST_PROXY;
+export const TRUST_PROXY = (() => {
+  const raw = TRUST_PROXY_RAW;
+  if (raw === undefined || raw === "") return 1; // default: trust single proxy hop
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  const num = Number(raw);
+  return Number.isFinite(num) ? num : raw; // pass string values like "loopback" through
+})();
 
 // Pushover settings
 export const PUSHOVER_APP_TOKEN = process.env.PUSHOVER_APP_TOKEN || "";
@@ -78,6 +86,7 @@ export default {
   STATIC_RATELIMIT_MAX,
   AUTH_RATELIMIT_MAX,
   TRUST_PROXY_RAW,
+  TRUST_PROXY,
   PUSHOVER_APP_TOKEN,
   PUSHOVER_USER_TOKEN,
 };

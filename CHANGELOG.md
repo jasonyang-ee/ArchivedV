@@ -19,7 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- RSS feed 404 for all channels caused by rapid-fire requests triggering YouTube rate-limiting; added configurable throttle delay (`FEED_CHANNEL_DELAY_MS`, default 1.5s) between channel feed fetches
+- RSS feed 404 for all channels: YouTube blocks default axios User-Agent with 404; now sends browser-standard headers (`User-Agent` + `Accept`) for feed requests
+- RSS feed requests also throttled between channels (`FEED_CHANNEL_DELAY_MS`, default 1.5s) to avoid rate-limiting
+- `X-Forwarded-For` ValidationError from express-rate-limit: `TRUST_PROXY` config existed but was never applied to Express; now defaults to `1` (trust first proxy hop) and is set on app startup
+- Feed fetch retry logic retried non-retryable HTTP errors (400, 403) due to overly broad `!!code` check; now only retries 429, 5xx, and network errors
+- Feed check summary now detects systemic failures (all channels failing) and logs a diagnostic instead of per-channel 404 messages
 - Feed fetch retry log showed `ERR_BAD_RESPONSE` instead of the actual HTTP status code
 - Auto-merge attempted ffmpeg on 0-byte corrupt fragments at startup, causing many unnecessary failures; now pre-checks file sizes and deletes corrupt fragments before invoking ffmpeg
 - Cookie-enabled deployments never saved videos: YouTube returns `"Video unavailable. This video is private"` when cookies are active (not `"Private video. Sign in..."`) — auth classifier now handles both forms

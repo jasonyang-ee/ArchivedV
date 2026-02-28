@@ -16,13 +16,16 @@
 
 import express from "express";
 import cors from "cors";
-import { PORT } from "./config.js";
+import { PORT, TRUST_PROXY } from "./config.js";
 import router, { setupProductionMiddleware } from "./routes.js";
 import { startScheduler, runInitialCheck } from "./scheduler.js";
 import { startDownloadWatchdog } from "./downloader.js";
 
 // Create Express app
 const app = express();
+
+// Trust proxy setting (needed for correct client IP behind reverse proxy / Docker)
+app.set("trust proxy", TRUST_PROXY);
 
 // Enable CORS
 app.use(cors());

@@ -58,11 +58,22 @@ function clearFeed404(channelId) {
   feed404Cache.delete(channelId);
 }
 
+// Headers for YouTube RSS feed requests.
+// YouTube blocks the default axios User-Agent ("axios/x.x.x") with 404.
+// A standard browser UA is needed since YouTube RSS is a public endpoint
+// that serves content to browsers and legitimate feed readers.
+const FEED_REQUEST_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  Accept: "application/atom+xml, application/xml, text/xml, */*",
+};
+
 async function fetchFeedWithRetry(url, channelLabel = "") {
   let lastErr;
   for (let attempt = 0; attempt <= FEED_FETCH_RETRIES; attempt++) {
     try {
       const res = await axios.get(url, {
+        headers: FEED_REQUEST_HEADERS,
         validateStatus: (s) => s >= 200 && s < 300,
       });
       return res.data;
@@ -70,13 +81,11 @@ async function fetchFeedWithRetry(url, channelLabel = "") {
       lastErr = e;
       const { statusCode, code } = normalizeError(e);
 
-      // 404 is very likely permanent (channel deleted/terminated). Don't spam retries.
-      if (statusCode === 404) throw e;
+      // Determine if this error is retryable
+      const isNetworkError = code === "ETIMEDOUT" || code === "ECONNABORTED" || code === "ECONNRESET" || code === "ENOTFOUND";
+      const isRetryableStatus = statusCode === 429 || (statusCode >= 500 && statusCode < 600);
 
-      // Transient network errors: retry with backoff.
-      const isTimeout = code === "ETIMEDOUT" || code === "ECONNABORTED";
-      const isNetwork = !!code;
-      if (attempt >= FEED_FETCH_RETRIES || (!isTimeout && !isNetwork)) {
+      if (attempt >= FEED_FETCH_RETRIES || (!isNetworkError && !isRetryableStatus)) {
         throw e;
       }
       const delay = jitter(FEED_FETCH_BACKOFF_MS * Math.pow(2, attempt));
@@ -267,6 +276,9 @@ export async function checkUpdates() {
     // Kick retry queue first so failed/partial work gets priority.
     await processRetryQueue();
 
+    let feedSuccessCount = 0;
+    let feedFailCount = 0;
+
     for (let i = 0; i < channels.length; i++) {
       const ch = channels[i];
       try {
@@ -284,6 +296,7 @@ export async function checkUpdates() {
 
         // Feed succeeded - clear any 404 suppression for this channel
         clearFeed404(ch.id);
+        feedSuccessCount++;
 
         const result = await xmlParser.parseStringPromise(xml);
         const entries = result.feed.entry || [];
@@ -436,6 +449,7 @@ export async function checkUpdates() {
           );
         }
       } catch (e) {
+        feedFailCount++;
         const { statusCode, code, message } = normalizeError(e);
         if (statusCode === 404) {
           // Only log first occurrence, then suppress for 1 hour to reduce log spam
@@ -452,11 +466,18 @@ export async function checkUpdates() {
       }
     }
 
-    // Log summary of 404 channels if any (less spammy than individual logs)
-    if (feed404Cache.size > 0) {
-      console.log(
-        `[INFO] [Archived V] Feed check complete. ${feed404Cache.size} channel(s) returning 404 (suppressing repeated logs).`
-      );
+    // Log feed check summary
+    if (feedFailCount > 0) {
+      if (feedSuccessCount === 0 && channels.length > 1) {
+        // All channels failed — likely a systemic issue, not individual channel problems
+        console.error(
+          `[ERROR] [Archived V] Feed check: all ${feedFailCount} channel(s) failed. This usually means YouTube is blocking requests from this server's IP. Check network/proxy settings.`
+        );
+      } else if (feed404Cache.size > 0) {
+        console.log(
+          `[INFO] [Archived V] Feed check complete. ${feedSuccessCount} OK, ${feed404Cache.size} returning 404 (suppressing repeated logs).`
+        );
+      }
     }
 
     status.lastRun = new Date().toISOString();
