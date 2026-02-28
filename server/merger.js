@@ -30,7 +30,7 @@ function cleanupFragmentFiles(folder, title, parts, attempt = 1, maxAttempts = 5
   try {
     folderFiles = fs.readdirSync(folder);
   } catch (e) {
-    console.warn(`[Archived V] Failed to read folder for cleanup: ${e.message}`);
+    console.warn(`[WARN] [Archived V] Failed to read folder for cleanup: ${e.message}`);
   }
   
   // Collect all video fragments and their related files
@@ -72,7 +72,7 @@ function cleanupFragmentFiles(folder, title, parts, attempt = 1, maxAttempts = 5
       if (e.code === 'EBUSY' || e.code === 'EPERM') {
         failedFiles.push(filePath);
       } else {
-        console.warn(`[Archived V] Failed to delete "${path.basename(filePath)}": ${e.message}`);
+        console.warn(`[WARN] [Archived V] Failed to delete "${path.basename(filePath)}": ${e.message}`);
       }
     }
   }
@@ -80,12 +80,12 @@ function cleanupFragmentFiles(folder, title, parts, attempt = 1, maxAttempts = 5
   // Retry failed files with exponential backoff
   if (failedFiles.length > 0 && attempt < maxAttempts) {
     const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s, 16s...
-    console.log(`[Archived V] Retrying cleanup for "${title}" in ${delay / 1000}s (attempt ${attempt + 1}/${maxAttempts})`);
+    console.log(`[INFO] [Archived V] Retrying cleanup for "${title}" in ${delay / 1000}s (attempt ${attempt + 1}/${maxAttempts})`);
     setTimeout(() => {
       cleanupFragmentFilesRetry(failedFiles, title, attempt + 1, maxAttempts);
     }, delay);
   } else if (failedFiles.length > 0) {
-    console.warn(`[Archived V] Could not delete ${failedFiles.length} file(s) for "${title}" after ${maxAttempts} attempts. Files may need manual cleanup.`);
+    console.warn(`[WARN] [Archived V] Could not delete ${failedFiles.length} file(s) for "${title}" after ${maxAttempts} attempts. Files may need manual cleanup.`);
   }
 }
 
@@ -102,21 +102,21 @@ function cleanupFragmentFilesRetry(files, title, attempt, maxAttempts) {
       if (e.code === 'EBUSY' || e.code === 'EPERM') {
         stillFailed.push(filePath);
       } else {
-        console.warn(`[Archived V] Failed to delete "${path.basename(filePath)}": ${e.message}`);
+        console.warn(`[WARN] [Archived V] Failed to delete "${path.basename(filePath)}": ${e.message}`);
       }
     }
   }
   
   if (stillFailed.length > 0 && attempt < maxAttempts) {
     const delay = Math.pow(2, attempt) * 1000;
-    console.log(`[Archived V] Retrying cleanup for "${title}" in ${delay / 1000}s (attempt ${attempt + 1}/${maxAttempts})`);
+    console.log(`[INFO] [Archived V] Retrying cleanup for "${title}" in ${delay / 1000}s (attempt ${attempt + 1}/${maxAttempts})`);
     setTimeout(() => {
       cleanupFragmentFilesRetry(stillFailed, title, attempt + 1, maxAttempts);
     }, delay);
   } else if (stillFailed.length > 0) {
-    console.warn(`[Archived V] Could not delete ${stillFailed.length} file(s) for "${title}" after ${maxAttempts} attempts: ${stillFailed.map(f => path.basename(f)).join(', ')}`);
+    console.warn(`[WARN] [Archived V] Could not delete ${stillFailed.length} file(s) for "${title}" after ${maxAttempts} attempts: ${stillFailed.map(f => path.basename(f)).join(', ')}`);
   } else {
-    console.log(`[Archived V] Successfully cleaned up fragment files for "${title}"`);
+    console.log(`[INFO] [Archived V] Successfully cleaned up fragment files for "${title}"`);
   }
 }
 
@@ -181,7 +181,7 @@ export function autoMerge(specificFolder = null, callback = null) {
     if (specificFolder) {
       mergeInFolder(specificFolder, callback);
     } else {
-      console.log('[Archived V] Starting auto merge of audio and video in all folders');
+      console.log('[INFO] [Archived V] Starting auto merge of audio and video in all folders');
       const videosFolders = findVideosFolders(DOWNLOAD_DIR);
       
       // Also scan direct download folders
@@ -191,10 +191,10 @@ export function autoMerge(specificFolder = null, callback = null) {
       for (const folder of allFolders) {
         mergeInFolder(folder);
       }
-      console.log('[Archived V] Auto merge completed for all folders');
+      console.log('[INFO] [Archived V] Auto merge completed for all folders');
     }
   } catch (e) {
-    console.error('[Archived V] Error during auto merge:', e.message);
+    console.error('[ERROR] [Archived V] Error during auto merge:', e.message);
     if (callback) callback();
   }
 }
@@ -277,7 +277,7 @@ export function mergeInFolder(folder, callback = null) {
     );
     
     if (hasFinalVideo) {
-      console.log(`[Archived V] Skipping merge in folder ${folder} - already has final video`);
+      console.log(`[INFO] [Archived V] Skipping merge in folder ${folder} - already has final video`);
       if (callback) callback();
       return;
     }
@@ -310,7 +310,7 @@ export function mergeInFolder(folder, callback = null) {
       return;
     }
     
-    console.log(`[Archived V] Starting auto merge of audio and video in folder: ${folder}`);
+    console.log(`[INFO] [Archived V] Starting auto merge of audio and video in folder: ${folder}`);
     
     // Find titles that have both video and audio
     const titleParts = Array.from(titleMap.entries()).filter(
@@ -336,13 +336,13 @@ export function mergeInFolder(folder, callback = null) {
       const outputPath = path.join(folder, output);
       
       if (fs.existsSync(outputPath)) {
-        console.log(`[Archived V] Merged file already exists for "${title}", skipping.`);
+        console.log(`[INFO] [Archived V] Merged file already exists for "${title}", skipping.`);
         completed++;
         if (completed === titleParts.length && callback) callback();
         continue;
       }
       
-      console.log(`[Archived V] Merging video "${videoFile}" + audio "${audioFile}" -> "${output}"`);
+      console.log(`[INFO] [Archived V] Merging video "${videoFile}" + audio "${audioFile}" -> "${output}"`);
       
       try {
         const proc = spawn('ffmpeg', [
@@ -361,16 +361,16 @@ export function mergeInFolder(folder, callback = null) {
         
         proc.on('close', (code) => {
           if (code === 0) {
-            console.log(`[Archived V] Successfully merged "${title}"`);
+            console.log(`[INFO] [Archived V] Successfully merged "${title}"`);
 
             // Delay cleanup to allow file handles to be released
             setTimeout(() => {
               cleanupFragmentFiles(folder, title, parts);
             }, 1000);
           } else {
-            console.error(`[Archived V] Failed to merge "${title}", ffmpeg exit code ${code}`);
+            console.error(`[ERROR] [Archived V] Failed to merge "${title}", ffmpeg exit code ${code}`);
             if (stderrOutput.trim()) {
-              console.error(`[Archived V] ffmpeg error: ${stderrOutput.trim()}`);
+              console.error(`[ERROR] [Archived V] ffmpeg error: ${stderrOutput.trim()}`);
             }
 
             // Delete corrupt/empty fragment files so yt-dlp can re-download them fresh.
@@ -384,7 +384,7 @@ export function mergeInFolder(folder, callback = null) {
                 const stat = fs.statSync(fragPath);
                 if (stat.size < corruptThreshold) {
                   fs.unlinkSync(fragPath);
-                  console.log(`[Archived V] Deleted corrupt fragment "${frag}" (${stat.size} bytes) to allow re-download`);
+                  console.log(`[INFO] [Archived V] Deleted corrupt fragment "${frag}" (${stat.size} bytes) to allow re-download`);
                   // Also remove associated .ytdl metadata file
                   try { fs.unlinkSync(fragPath + '.ytdl'); } catch {}
                 }
@@ -394,18 +394,18 @@ export function mergeInFolder(folder, callback = null) {
           
           completed++;
           if (completed === titleParts.length && callback) {
-            console.log(`[Archived V] Auto merge completed for folder: ${folder}`);
+            console.log(`[INFO] [Archived V] Auto merge completed for folder: ${folder}`);
             callback();
           }
         });
       } catch (e) {
-        console.error(`[Archived V] Error starting ffmpeg for "${title}": ${e.message}`);
+        console.error(`[ERROR] [Archived V] Error starting ffmpeg for "${title}": ${e.message}`);
         completed++;
         if (completed === titleParts.length && callback) callback();
       }
     }
   } catch (e) {
-    console.error(`[Archived V] Error merging in folder ${folder}: ${e.message}`);
+    console.error(`[ERROR] [Archived V] Error merging in folder ${folder}: ${e.message}`);
     if (callback) callback();
   }
 }

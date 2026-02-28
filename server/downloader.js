@@ -156,7 +156,7 @@ export function safeCleanupDirectory(dir, reason = "") {
 
     if (protectedFiles.length > 0) {
       console.log(
-        `[Archived V] NOT deleting "${dir}" - contains ${protectedFiles.length} video/media file(s): ${protectedFiles.slice(0, 3).join(", ")}${protectedFiles.length > 3 ? "..." : ""}`
+        `[INFO] [Archived V] NOT deleting "${dir}" - contains ${protectedFiles.length} video/media file(s): ${protectedFiles.slice(0, 3).join(", ")}${protectedFiles.length > 3 ? "..." : ""}`
       );
       return { cleaned: false, reason: "Contains protected video files", files: protectedFiles };
     }
@@ -164,17 +164,17 @@ export function safeCleanupDirectory(dir, reason = "") {
     // Only delete if truly empty (no files at all)
     if (files.length === 0) {
       fs.rmSync(dir, { recursive: true, force: true });
-      console.log(`[Archived V] Cleaned up empty directory: ${dir}${reason ? ` (${reason})` : ""}`);
+      console.log(`[INFO] [Archived V] Cleaned up empty directory: ${dir}${reason ? ` (${reason})` : ""}`);
       return { cleaned: true, reason: "Empty directory removed" };
     }
 
     // Has non-video files (thumbnails, metadata, etc.) - don't delete
     console.log(
-      `[Archived V] NOT deleting "${dir}" - contains ${files.length} file(s): ${files.slice(0, 3).join(", ")}${files.length > 3 ? "..." : ""}`
+      `[INFO] [Archived V] NOT deleting "${dir}" - contains ${files.length} file(s): ${files.slice(0, 3).join(", ")}${files.length > 3 ? "..." : ""}`
     );
     return { cleaned: false, reason: "Contains other files", files };
   } catch (e) {
-    console.error(`[Archived V] Error during cleanup of "${dir}": ${e.message}`);
+    console.error(`[ERROR] [Archived V] Error during cleanup of "${dir}": ${e.message}`);
     return { cleaned: false, reason: e.message };
   }
 }
@@ -323,7 +323,7 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
           if (tracking.consecutive403Count >= 100) {
             tracking.killedBy403Loop = true;
             console.warn(
-              `[Archived V] Stopping yt-dlp for "${downloadInfo.title}" - stream appears to have ended (${tracking.consecutive403Count} consecutive 403 errors)`
+              `[WARN] [Archived V] Stopping yt-dlp for "${downloadInfo.title}" - stream appears to have ended (${tracking.consecutive403Count} consecutive 403 errors)`
             );
             try {
               proc.kill("SIGTERM");
@@ -352,7 +352,7 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
 
           markAuthSkipped(downloadInfo.videoId);
           console.warn(
-            `[Archived V] Stopping yt-dlp for auth-required video "${downloadInfo.title}" (no cookies; ${authFailure.reason}).`
+            `[WARN] [Archived V] Stopping yt-dlp for auth-required video "${downloadInfo.title}" (no cookies; ${authFailure.reason}).`
           );
 
           try {
@@ -376,7 +376,7 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
     if (tracking.killedBy403Loop) {
       handleDownloadSuccess(dir, downloadInfo, "stream ended");
       db.write();
-      console.log(`[Archived V] Stream ended for "${downloadInfo.title}" - download complete (403 loop detected)`);
+      console.log(`[INFO] [Archived V] Stream ended for "${downloadInfo.title}" - download complete (403 loop detected)`);
       return;
     }
 
@@ -415,7 +415,7 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
 
         markAuthSkipped(downloadInfo.videoId);
         console.warn(
-          `[Archived V] Skipping auth-required video "${downloadInfo.title}" (no cookies; ${authFailure.reason}).`
+          `[WARN] [Archived V] Skipping auth-required video "${downloadInfo.title}" (no cookies; ${authFailure.reason}).`
         );
         return;
       }
@@ -437,7 +437,7 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
         db.write();
 
         console.warn(
-          `[Archived V] Skipping "${downloadInfo.title}" after ${attempts} auth failures (${authFailure.reason}).`
+          `[WARN] [Archived V] Skipping "${downloadInfo.title}" after ${attempts} auth failures (${authFailure.reason}).`
         );
         return;
       }
@@ -448,7 +448,7 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
       handleDownloadSuccess(dir, downloadInfo);
       db.write();
       console.warn(
-        `[Archived V] yt-dlp exited ${code} but produced a usable file for "${downloadInfo.title}"; recording as success.`
+        `[WARN] [Archived V] yt-dlp exited ${code} but produced a usable file for "${downloadInfo.title}"; recording as success.`
       );
       return;
     }
@@ -514,7 +514,7 @@ export function startDownloadWatchdog() {
       if (quiet < DOWNLOAD_WATCHDOG_NO_OUTPUT_MS) continue;
 
       console.error(
-        `[Archived V] Watchdog: killing stuck yt-dlp (no output for ${Math.round(quiet / 1000)}s) for "${dl.downloadInfo?.title}"`
+        `[ERROR] [Archived V] Watchdog: killing stuck yt-dlp (no output for ${Math.round(quiet / 1000)}s) for "${dl.downloadInfo?.title}"`
       );
       try {
         dl.killedByWatchdog = true;

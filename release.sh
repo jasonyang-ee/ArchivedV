@@ -75,7 +75,7 @@ fi
 
 # Read current version from package.json
 get_current_version() {
-    node -p "require('./package.json').version"
+    node -p "require('./package.json').version" 2>/dev/null || echo "1.0.0"
 }
 
 # Increment version
@@ -215,7 +215,7 @@ echo -e "${GREEN}New version: ${BOLD}$NEW_VERSION${NC}"
 # -----------------------------------------------------------------------------
 
 if [ "$SKIP_CONFIRM" != true ]; then
-	read -p "Do you want to proceed? (y/n) " CONFIRM
+    read -p "Do you want to proceed? (y/n) " CONFIRM
     if [[ "$CONFIRM" != "y" ]]; then
         echo -e "${RED}Release process canceled.${NC}"
         exit 1

@@ -35,8 +35,8 @@ setupProductionMiddleware(app);
 
 // Start the server
 app.listen(PORT, () => {
-  console.log(`[Archived V] Server running on port ${PORT}`);
-  console.log(`[Archived V] Environment: ${process.env.NODE_ENV || "production"}`);
+  console.log(`[INFO] [Archived V] Server running on port ${PORT}`);
+  console.log(`[INFO] [Archived V] Environment: ${process.env.NODE_ENV || "production"}`);
 
   // Start cron schedulers and retry queue processor
   startScheduler();

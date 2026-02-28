@@ -49,6 +49,10 @@ Single-process Node.js server with these subsystems:
 - Server log prefix: `[Archived V]` for app messages, `[yt-dlp]` for subprocess output.
 - File naming: `camelCase.js` for server modules, `PascalCase.jsx` for React components.
 - `CHANGELOG.md` maintained for the `## [Unreleased]` section. Consolidate multi-step fixes into one entry.
+- Server logs: ASCII only, format `[LEVEL] [ServiceName] Message`
+- Server files: `{entity}Controller.js`, `{name}Service.js`, `{entity}.js` (routes)
+- Client files: `{PageName}.jsx` (pages), `{ComponentName}.jsx` (components)
+- Naming: camelCase (vars/functions), PascalCase (components), snake_case (DB columns/tables)
 
 ## Versioning
 

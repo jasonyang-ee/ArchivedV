@@ -252,7 +252,7 @@ router.post("/api/channels", async (req, res) => {
   let channelName = username;
   try {
     if (!isValidYouTubeUrl(xmlLink)) {
-      console.error(`[Archived V] Invalid RSS URL for channel ${username}: ${xmlLink}`);
+      console.error(`[ERROR] [Archived V] Invalid RSS URL for channel ${username}: ${xmlLink}`);
       channelName = username; // fallback
     } else {
       const xml = (await axios.get(xmlLink)).data;
@@ -267,7 +267,7 @@ router.post("/api/channels", async (req, res) => {
       }
     }
   } catch (e) {
-    console.warn("[Archived V] Failed to fetch channel name from RSS, using username");
+    console.warn("[WARN] [Archived V] Failed to fetch channel name from RSS, using username");
   }
 
   if (!existing) {
@@ -392,7 +392,7 @@ router.delete("/api/downloads/:downloadId", (req, res) => {
     const cancelledTitle = download.downloadInfo.title;
     if (!db.data.ignoreKeywords.includes(cancelledTitle)) {
       db.data.ignoreKeywords.push(cancelledTitle);
-      console.log(`[Archived V] Added cancelled video to ignore list: ${cancelledTitle}`);
+      console.log(`[INFO] [Archived V] Added cancelled video to ignore list: ${cancelledTitle}`);
     }
 
     db.write();
@@ -405,10 +405,10 @@ router.delete("/api/downloads/:downloadId", (req, res) => {
       }
     }, 10000);
 
-    console.log(`[Archived V] Cancelled download: ${cancelledTitle}`);
+    console.log(`[INFO] [Archived V] Cancelled download: ${cancelledTitle}`);
 
     // Trigger auto-merge in case partial files exist
-    console.log("[Archived V] Triggering auto-merge after download cancellation");
+    console.log("[INFO] [Archived V] Triggering auto-merge after download cancellation");
     autoMerge(download.dir);
 
     res.json({
@@ -416,7 +416,7 @@ router.delete("/api/downloads/:downloadId", (req, res) => {
       message: "Download cancelled, removed from retry queue, and added to ignore list",
     });
   } catch (err) {
-    console.error(`[Archived V] Error cancelling download: ${err.message}`);
+    console.error(`[ERROR] [Archived V] Error cancelling download: ${err.message}`);
     res.status(500).json({ error: "Failed to cancel download" });
   }
 });
@@ -438,9 +438,9 @@ router.delete("/api/history", (req, res) => {
 // API: Manual refresh
 router.post("/api/refresh", (req, res) => {
   status.current = null;
-  checkUpdates().catch((err) => console.error("[Archived V] Refresh error:", err));
+  checkUpdates().catch((err) => console.error("[ERROR] [Archived V] Refresh error:", err));
   res.json(status);
-  console.log(`[Archived V] Manual Checking for New Streams`);
+  console.log(`[INFO] [Archived V] Manual Checking for New Streams`);
 });
 
 // Export setup function that configures production static serving

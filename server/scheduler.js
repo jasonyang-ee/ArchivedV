@@ -80,7 +80,7 @@ async function fetchFeedWithRetry(url, channelLabel = "") {
       }
       const delay = jitter(FEED_FETCH_BACKOFF_MS * Math.pow(2, attempt));
       console.warn(
-        `[Archived V] Feed fetch retry ${attempt + 1}/${FEED_FETCH_RETRIES} for ${channelLabel || url} after ${delay}ms (${code || statusCode || "error"})`
+        `[WARN] [Archived V] Feed fetch retry ${attempt + 1}/${FEED_FETCH_RETRIES} for ${channelLabel || url} after ${delay}ms (${code || statusCode || "error"})`
       );
       await sleep(delay);
     }
@@ -110,7 +110,7 @@ export async function processRetryQueue() {
     if (uniqueJobs.size !== db.data.retryQueue.length) {
       db.data.retryQueue = Array.from(uniqueJobs.values());
       db.write();
-      console.log(`[Archived V] Deduplicated retry queue: ${db.data.retryQueue.length} unique jobs`);
+      console.log(`[INFO] [Archived V] Deduplicated retry queue: ${db.data.retryQueue.length} unique jobs`);
     }
 
     // Refresh counts into status
@@ -138,7 +138,7 @@ export async function processRetryQueue() {
     }
     if (resetCount > 0) {
       db.write();
-      console.log(`[Archived V] Reset ${resetCount} stale inProgress flag(s) in retry queue`);
+      console.log(`[INFO] [Archived V] Reset ${resetCount} stale inProgress flag(s) in retry queue`);
     }
 
     // Start due jobs while capacity allows
@@ -152,7 +152,7 @@ export async function processRetryQueue() {
       if (ignoreKeywords.some((k) => job.title.toLowerCase().includes(k))) {
         db.data.retryQueue = db.data.retryQueue.filter((j) => j.key !== job.key);
         db.write();
-        console.log(`[Archived V] Skipping retry for "${job.title}" - matches ignore keyword`);
+        console.log(`[INFO] [Archived V] Skipping retry for "${job.title}" - matches ignore keyword`);
         continue;
       }
 
@@ -172,7 +172,7 @@ export async function processRetryQueue() {
         job.updatedAt = nowIso();
         db.data.retryQueue = db.data.retryQueue.map((j) => (j.key === job.key ? job : j));
         db.write();
-        console.log(`[Archived V] Skipping retry queue job for "${job.title}" - already downloading`);
+        console.log(`[INFO] [Archived V] Skipping retry queue job for "${job.title}" - already downloading`);
         continue;
       }
 
@@ -253,7 +253,7 @@ export async function checkUpdates() {
       status.currentDownloads = activeCurrentDownloads;
       db.write();
       if (removedCount > 0) {
-        console.log(`[Archived V] Removed ${removedCount} stale currentDownloads entry(ies)`);
+        console.log(`[INFO] [Archived V] Removed ${removedCount} stale currentDownloads entry(ies)`);
       }
     } else {
       status.currentDownloads = db.data.currentDownloads;
@@ -270,7 +270,7 @@ export async function checkUpdates() {
       try {
         // Validate URL before making request to prevent SSRF
         if (!isValidYouTubeUrl(ch.link)) {
-          console.error(`[Archived V] Skipping invalid channel URL: ${ch.link}`);
+          console.error(`[ERROR] [Archived V] Skipping invalid channel URL: ${ch.link}`);
           continue;
         }
         const xml = await fetchFeedWithRetry(ch.link, ch.username || ch.id);
@@ -391,7 +391,7 @@ export async function checkUpdates() {
                   }
 
                   if (state.kind === "empty") {
-                    console.log(`[Archived V] Removing empty folder: ${folderPath}`);
+                    console.log(`[INFO] [Archived V] Removing empty folder: ${folderPath}`);
                     fs.rmSync(folderPath, { recursive: true, force: true });
                   }
                 }
@@ -434,13 +434,13 @@ export async function checkUpdates() {
           // Only log first occurrence, then suppress for 1 hour to reduce log spam
           if (shouldLogFeed404(ch.id)) {
             console.warn(
-              `[Archived V] Feed 404 for channel ${ch.username} (${ch.id}). Skipping this cycle (will suppress repeated logs for 1h).`
+              `[WARN] [Archived V] Feed 404 for channel ${ch.username} (${ch.id}). Skipping this cycle (will suppress repeated logs for 1h).`
             );
           }
         } else if (code === "ETIMEDOUT" || code === "ECONNABORTED") {
-          console.warn(`[Archived V] Timeout fetching feed for channel ${ch.username}`);
+          console.warn(`[WARN] [Archived V] Timeout fetching feed for channel ${ch.username}`);
         } else {
-          console.error(`[Archived V] Feed error for channel ${ch.username}: ${message}`);
+          console.error(`[ERROR] [Archived V] Feed error for channel ${ch.username}: ${message}`);
         }
       }
     }
@@ -448,7 +448,7 @@ export async function checkUpdates() {
     // Log summary of 404 channels if any (less spammy than individual logs)
     if (feed404Cache.size > 0) {
       console.log(
-        `[Archived V] Feed check complete. ${feed404Cache.size} channel(s) returning 404 (suppressing repeated logs).`
+        `[INFO] [Archived V] Feed check complete. ${feed404Cache.size} channel(s) returning 404 (suppressing repeated logs).`
       );
     }
 
@@ -474,7 +474,7 @@ export async function checkUpdates() {
       checkPending = false;
       // Run one more pass if something requested while we were running
       setImmediate(() => {
-        checkUpdates().catch((err) => console.error("[Archived V] Queued check error:", err));
+        checkUpdates().catch((err) => console.error("[ERROR] [Archived V] Queued check error:", err));
       });
     }
   }
@@ -483,19 +483,19 @@ export async function checkUpdates() {
 export function startScheduler() {
   // Start normal cron scheduler - every 10 minutes
   cron.schedule("*/10 * * * *", () => {
-    console.log(`[Archived V] Scheduler Checking for New Streams`);
-    checkUpdates().catch((err) => console.error("[Archived V] Cron error:", err));
+    console.log(`[INFO] [Archived V] Scheduler Checking for New Streams`);
+    checkUpdates().catch((err) => console.error("[ERROR] [Archived V] Cron error:", err));
   });
 
   // Start retry queue scheduler - every minute
   setInterval(() => {
-    processRetryQueue().catch((err) => console.error("Retry queue error:", err));
+    processRetryQueue().catch((err) => console.error("[ERROR] [Archived V] Retry queue error:", err));
   }, 60 * 1000);
 }
 
 export function runInitialCheck() {
-  console.log("[Archived V] Initial Checking for New Streams");
-  checkUpdates().catch((err) => console.error("[Archived V] Startup refresh error:", err));
+  console.log("[INFO] [Archived V] Initial Checking for New Streams");
+  checkUpdates().catch((err) => console.error("[ERROR] [Archived V] Startup refresh error:", err));
 
   // Run auto merge on startup
   autoMerge();

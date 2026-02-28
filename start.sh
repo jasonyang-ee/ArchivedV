@@ -1,30 +1,70 @@
 #!/bin/bash
 
-echo "Starting (Un)Archived V Development Server..."
+# ArchivedV - Development Startup Script
+
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+echo "ArchivedV - Development Mode"
 echo ""
 
-# Check if node_modules exists
-echo "📦 Installing dependencies..."
-npm install
-npm run build
+# Validate we're in the right directory
+if [ ! -f package.json ]; then
+    echo -e "${RED}Error: Run this script from the project root (package.json not found).${NC}"
+    exit 1
+fi
+
+# Install dependencies only if needed
+if [ ! -d "node_modules" ]; then
+    echo "Installing dependencies..."
+    npm install || { echo -e "${RED}Error: npm install failed.${NC}"; exit 1; }
+fi
+
+# Build client
+echo "Building client..."
+npm run build || { echo -e "${RED}Error: Build failed.${NC}"; exit 1; }
 echo ""
 
+# Ensure data directories exist
+mkdir -p data download
 
-# Create data directory if it doesn't exist
-if [ ! -d "data" ]; then
-    echo "Creating data directory..."
-    mkdir -p data
+# Cleanup handler
+cleanup() {
     echo ""
-fi
+    echo "Shutting down..."
+    [ -n "$DEV_PID" ] && kill "$DEV_PID" 2>/dev/null || true
+    echo "Stopped."
+    exit 0
+}
 
-# Create download directory if it doesn't exist
-if [ ! -d "download" ]; then
-    echo "Creating download directory..."
-    mkdir -p download
-    echo ""
-fi
+trap cleanup SIGTERM SIGINT
 
-# Start the application
+# Start development servers
 echo "Starting development servers..."
+npm run dev &
+DEV_PID=$!
 
-npm run dev
+sleep 3
+if ! kill -0 "$DEV_PID" 2>/dev/null; then
+    echo -e "${RED}Error: Development server failed to start.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}OK${NC} Development servers started (PID: $DEV_PID)"
+echo ""
+echo -e "${GREEN}Servers running:${NC}"
+echo "  Frontend: http://localhost:5173"
+echo "  Backend:  http://localhost:3000"
+echo ""
+
+# Wait for the process to exit
+wait "$DEV_PID"
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -ne 0 ]; then
+    echo -e "${RED}Error: Development server exited unexpectedly (code: $EXIT_CODE).${NC}"
+fi
+
+cleanup
+exit $EXIT_CODE

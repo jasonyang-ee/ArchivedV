@@ -9,15 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- 
+-
 
 ### Changed
 
-- 
+- start.sh: added fail-safe improvements (color output, trap/cleanup handler, PID tracking, conditional npm install, startup health check)
+- release.sh: added version fallback in get_current_version(), fixed confirmation prompt indentation
+- Server logs standardized to [LEVEL] [ServiceName] Message format across all server modules
 
 ### Fixed
 
-- 
+-
 
 ## [1.6.0] - 2026-01-04
 
