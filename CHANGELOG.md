@@ -9,17 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
--
+- `AGENTS.md` for development workflow and project structure reference
 
 ### Changed
 
-- start.sh: added fail-safe improvements (color output, trap/cleanup handler, PID tracking, conditional npm install, startup health check)
-- release.sh: added version fallback in get_current_version(), fixed confirmation prompt indentation
-- Server logs standardized to [LEVEL] [ServiceName] Message format across all server modules
+- `start.sh`: color output, trap/cleanup, PID tracking, conditional install, startup health check
+- `release.sh`: version fallback in `get_current_version()`, fixed confirmation prompt indentation
+- Server logs standardized to `[LEVEL] [Archived V] Message` format across all modules
 
 ### Fixed
 
--
+- Cookie-enabled deployments never saved videos: YouTube returns `"Video unavailable. This video is private"` when cookies are active (not `"Private video. Sign in..."`) — auth classifier now handles both forms
+- 403 loop detection never triggered: was tracking per-fragment number, but video+audio streams interleave different fragment numbers; now counts all consecutive 403s globally
+- Corrupt fragments (<1KB) after a failed merge permanently blocked yt-dlp re-download; now auto-deleted on merge failure
 
 ## [1.6.0] - 2026-01-04
 
