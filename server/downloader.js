@@ -706,6 +706,55 @@ export function recoverStaleDownloads() {
   db.write();
 }
 
+// Startup cleanup: purge ghost/invalid entries from retryQueue
+export function cleanupRetryQueue() {
+  db.read();
+  if (!db.data.retryQueue || db.data.retryQueue.length === 0) return;
+
+  const before = db.data.retryQueue.length;
+  const channelIds = new Set((db.data.channels || []).map((c) => c.id));
+  const ignoreKeywords = (db.data.ignoreKeywords || []).map((k) => k.toLowerCase());
+
+  // Deduplicate by key, keeping the newest entry
+  const byKey = new Map();
+  for (const job of db.data.retryQueue) {
+    const existing = byKey.get(job.key);
+    if (!existing || new Date(job.updatedAt) > new Date(existing.updatedAt)) {
+      byKey.set(job.key, job);
+    }
+  }
+
+  const cleaned = [];
+  for (const [, job] of byKey) {
+    // Remove entries with missing essential fields
+    if (!job.videoId || !job.channelId) continue;
+
+    // Remove entries for channels no longer monitored
+    if (!channelIds.has(job.channelId)) continue;
+
+    // Remove entries matching ignore keywords
+    if (job.title && ignoreKeywords.some((k) => job.title.toLowerCase().includes(k))) continue;
+
+    // Remove entries for already-downloaded videos (complete folder exists)
+    if (job.dir) {
+      const folderState = inspectDownloadFolder(job.dir);
+      if (folderState.kind === "complete") continue;
+    }
+
+    // Reset inProgress flag (no active processes at startup)
+    job.inProgress = false;
+
+    cleaned.push(job);
+  }
+
+  const removed = before - cleaned.length;
+  if (removed > 0) {
+    db.data.retryQueue = cleaned;
+    db.write();
+    console.log(`[INFO] [Archived V] Startup cleanup: removed ${removed} ghost/invalid retry queue entry(ies) (${before} -> ${cleaned.length})`);
+  }
+}
+
 export default {
   status,
   activeDownloads,
@@ -723,4 +772,5 @@ export default {
   startYtDlp,
   startDownloadWatchdog,
   recoverStaleDownloads,
+  cleanupRetryQueue,
 };

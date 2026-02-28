@@ -19,7 +19,7 @@ import cors from "cors";
 import { PORT, TRUST_PROXY } from "./config.js";
 import router, { setupProductionMiddleware } from "./routes.js";
 import { startScheduler, runInitialCheck } from "./scheduler.js";
-import { startDownloadWatchdog } from "./downloader.js";
+import { startDownloadWatchdog, recoverStaleDownloads, cleanupRetryQueue } from "./downloader.js";
 
 // Create Express app
 const app = express();
@@ -40,6 +40,10 @@ setupProductionMiddleware(app);
 app.listen(PORT, () => {
   console.log(`[INFO] [Archived V] Server running on port ${PORT}`);
   console.log(`[INFO] [Archived V] Environment: ${process.env.NODE_ENV || "production"}`);
+
+  // Recover stale downloads and clean up ghost retry queue entries
+  recoverStaleDownloads();
+  cleanupRetryQueue();
 
   // Start cron schedulers and retry queue processor
   startScheduler();
