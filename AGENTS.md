@@ -24,14 +24,6 @@ ArchivedV/
   doc/              # Logo and screenshot assets
 ```
 
-## Technology Stack
-
-- **Backend:** Express 5, Node.js 24, yt-dlp (Python), ffmpeg
-- **Frontend:** React 19, Vite, Tailwind CSS v4
-- **Database:** Single JSON file via custom read/write helper (no ORM)
-- **Deployment:** Docker multi-stage build (Alpine), Docker Compose
-- **Notifications:** Pushover (optional)
-
 ## Server Architecture
 
 Single-process Node.js server with these subsystems:
@@ -58,3 +50,6 @@ Single-process Node.js server with these subsystems:
 - File naming: `camelCase.js` for server modules, `PascalCase.jsx` for React components.
 - `CHANGELOG.md` maintained for the `## [Unreleased]` section. Consolidate multi-step fixes into one entry.
 
+## Versioning
+
+- Update CHANGELOG.md `## [Unreleased]` section for every feature or fix
