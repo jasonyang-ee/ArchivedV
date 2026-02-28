@@ -291,7 +291,6 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
     killedByAuthSkip: false,
     killedBy403Loop: false,
     consecutive403Count: 0,
-    last403Fragment: null,
   };
 
   activeDownloads.set(downloadId, tracking);
@@ -313,28 +312,26 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
     text.split(/\r?\n/).forEach((line) => {
       if (line) console.warn(`[yt-dlp] ${line}`);
 
-      // Detect 403 Forbidden retry loops (stream ended but yt-dlp keeps retrying same fragment)
+      // Detect 403 Forbidden retry loops (stream ended but yt-dlp keeps retrying fragments)
+      // Count ALL consecutive 403 errors regardless of fragment number, since video+audio
+      // streams interleave different fragment numbers in their error output.
       if (!tracking.killedBy403Loop && line) {
-        const match403 = line.match(/Got error: HTTP Error 403.*Retrying fragment (\d+)/i);
+        const match403 = line.match(/Got error: HTTP Error 403.*Retrying fragment/i);
         if (match403) {
-          const fragmentNum = match403[1];
-          if (tracking.last403Fragment === fragmentNum) {
-            tracking.consecutive403Count++;
-            // If we've seen 100+ consecutive 403 errors on the same fragment, stream has ended
-            if (tracking.consecutive403Count >= 100) {
-              tracking.killedBy403Loop = true;
-              console.warn(
-                `[Archived V] Stopping yt-dlp for "${downloadInfo.title}" - stream appears to have ended (${tracking.consecutive403Count} consecutive 403 errors on fragment ${fragmentNum})`
-              );
-              try {
-                proc.kill("SIGTERM");
-              } catch {}
-            }
-          } else {
-            // Different fragment, reset counter
-            tracking.last403Fragment = fragmentNum;
-            tracking.consecutive403Count = 1;
+          tracking.consecutive403Count++;
+          // If we've seen 100+ consecutive 403 errors (across all fragments/streams), stream has ended
+          if (tracking.consecutive403Count >= 100) {
+            tracking.killedBy403Loop = true;
+            console.warn(
+              `[Archived V] Stopping yt-dlp for "${downloadInfo.title}" - stream appears to have ended (${tracking.consecutive403Count} consecutive 403 errors)`
+            );
+            try {
+              proc.kill("SIGTERM");
+            } catch {}
           }
+        } else if (line.trim()) {
+          // Any non-403 output resets the counter (successful fragment, progress, etc.)
+          tracking.consecutive403Count = 0;
         }
       }
 

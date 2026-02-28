@@ -17,6 +17,7 @@ build/
 logs
 *.log
 npm-debug.log*
+*-cwd
 
 # IDE
 .vscode/

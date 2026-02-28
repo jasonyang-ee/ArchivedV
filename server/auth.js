@@ -57,6 +57,9 @@ export function classifyYtDlpAuthFailure(text) {
 
   // Members-only / private / login-required patterns
   if (t.includes("private video") && t.includes("sign in")) return { kind: "auth_required", reason: "private_video" };
+  // When cookies are enabled, YouTube returns a different error for private videos:
+  // "Video unavailable. This video is private" (no "sign in" prompt)
+  if (t.includes("video unavailable") && t.includes("this video is private")) return { kind: "auth_required", reason: "private_video" };
   if (t.includes("this video is available to this channel's members")) return { kind: "auth_required", reason: "members_only" };
   if (t.includes("join this channel") && t.includes("access")) return { kind: "auth_required", reason: "members_only" };
   if (t.includes("sign in") && t.includes("you've been granted access")) return { kind: "auth_required", reason: "private_video" };

@@ -362,7 +362,7 @@ export function mergeInFolder(folder, callback = null) {
         proc.on('close', (code) => {
           if (code === 0) {
             console.log(`[Archived V] Successfully merged "${title}"`);
-            
+
             // Delay cleanup to allow file handles to be released
             setTimeout(() => {
               cleanupFragmentFiles(folder, title, parts);
@@ -371,6 +371,24 @@ export function mergeInFolder(folder, callback = null) {
             console.error(`[Archived V] Failed to merge "${title}", ffmpeg exit code ${code}`);
             if (stderrOutput.trim()) {
               console.error(`[Archived V] ffmpeg error: ${stderrOutput.trim()}`);
+            }
+
+            // Delete corrupt/empty fragment files so yt-dlp can re-download them fresh.
+            // With --no-part, yt-dlp treats existing files as "already downloaded" and skips them,
+            // so corrupt fragments block recovery permanently unless removed.
+            const corruptThreshold = 1024; // 1KB - fragments below this are certainly corrupt
+            const allFrags = [...parts.videos, ...parts.audios];
+            for (const frag of allFrags) {
+              const fragPath = path.join(folder, frag);
+              try {
+                const stat = fs.statSync(fragPath);
+                if (stat.size < corruptThreshold) {
+                  fs.unlinkSync(fragPath);
+                  console.log(`[Archived V] Deleted corrupt fragment "${frag}" (${stat.size} bytes) to allow re-download`);
+                  // Also remove associated .ytdl metadata file
+                  try { fs.unlinkSync(fragPath + '.ytdl'); } catch {}
+                }
+              } catch {}
             }
           }
           
