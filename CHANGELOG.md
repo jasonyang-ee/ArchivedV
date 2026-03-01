@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- 
+
+### Changed
+
+- 
+
+### Fixed
+
+- 
+
+## [1.7.0] - 2026-02-28
+
+### Added
+
 - `AGENTS.md` for development workflow and project structure reference
 - **Scheduled Streams tracking**: Detects YouTube scheduled live events ("This live event will begin in X hours") and tracks them separately instead of spamming the retry queue. Streams are held until 5 minutes before their scheduled time, then automatically promoted to the download queue
 - **Scheduled Streams UI**: New section in the Status panel showing tracked scheduled streams with channel name, estimated start time, relative countdown, and remove button
@@ -20,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `release.sh`: version fallback in `get_current_version()`, fixed confirmation prompt indentation
 - Server logs standardized to `[LEVEL] [Archived V] Message` format across all modules
 - **Feed fetching: smarter staggering** — channels are shuffled each cycle to distribute rate-limit impact; adaptive delay increases on consecutive failures (up to 5s) and resets on success; extra pause between batches of 5 channels
+- Removed cookies feature from UI since the feature is not working as intended. Future release will conver this feature.
 
 ### Fixed
 
