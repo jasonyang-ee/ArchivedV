@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import axios from "axios";
 import { Parser, processors } from "xml2js";
-import cron from "node-cron";
+
 import db from "./database.js";
 import { autoMerge } from "./merger.js";
 import { isAuthSkipped, canUseCookies } from "./auth.js";
@@ -590,11 +590,11 @@ export async function checkUpdates() {
 }
 
 export function startScheduler() {
-  // Start normal cron scheduler - every 10 minutes
-  cron.schedule("*/10 * * * *", () => {
+  // Check for new streams every 10 minutes
+  setInterval(() => {
     console.log(`[INFO] [Archived V] Scheduler Checking for New Streams`);
     checkUpdates().catch((err) => console.error("[ERROR] [Archived V] Cron error:", err));
-  });
+  }, 10 * 60 * 1000);
 
   // Start retry queue scheduler - every minute (also checks scheduled streams for promotion)
   setInterval(() => {
