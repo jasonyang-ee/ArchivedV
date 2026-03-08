@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- 
+
+### Changed
+
+- 
+
+### Fixed
+
+- 
+
+## [1.7.1] - 2026-03-07
+
 ### Fixed
 
 - Cron thread locking up entire server during feed refresh. Using setinterval for scheduling instead of cron thread to avoid blocking main server thread.
