@@ -23,7 +23,7 @@
 
 @layer components {
   .btn {
-    @apply px-4 py-2 rounded-lg font-medium transition-colors duration-200;
+    @apply px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors duration-200;
   }
 
   .btn-primary {
@@ -39,7 +39,7 @@
   }
 
   .card {
-    @apply bg-white rounded-lg shadow-md p-6 dark:bg-[#2a2a2a] dark:shadow-black/50;
+    @apply bg-white rounded-lg shadow-md p-4 sm:p-6 dark:bg-[#2a2a2a] dark:shadow-black/50;
   }
 
   .input {

@@ -63,7 +63,7 @@ export default function CookieSettings() {
 
   return (
     <div className="card">
-      <div className="flex items-start justify-between gap-4 mb-2">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-4 mb-2">
         <div>
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
             Members-only Cookies

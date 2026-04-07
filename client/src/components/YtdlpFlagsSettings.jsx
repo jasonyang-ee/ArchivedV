@@ -43,7 +43,7 @@ export default function YtdlpFlagsSettings() {
 
   return (
     <div className="card">
-      <div className="flex items-start justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-4 mb-4 sm:mb-6">
         <div>
           <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
             Custom yt-dlp Flags

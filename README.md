@@ -109,30 +109,6 @@ Change to the user ID of your host system if necessary. You can do this by modif
 
 
 
-## Members-only / Private Videos (Cookies)
-
-Some videos (members-only, private, age-restricted) cannot be downloaded by `yt-dlp` without authentication.
-
-When this happens, ArchivedV will:
-
-- Skip that video when cookies are not configured (no history entry).
-- Avoid retrying it over and over during the same runtime.
-
-To enable downloading those videos, provide a YouTube `cookies.txt`:
-
-1. Export cookies from your browser (see yt-dlp docs for the latest methods):
-	- https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp
-	- https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies
-2. Open the web UI and use the **Members-only Cookies** card:
-	- Paste the full `cookies.txt` content
-	- Click **Save Cookies**
-	- Toggle **Enabled**
-
-After cookies are saved/enabled, the service can download members-only/private videos.
-
-Security note: `cookies.txt` contains your account session. Only use this on a trusted machine.
-
-
 
 ## Custom YT-DLP Options
 

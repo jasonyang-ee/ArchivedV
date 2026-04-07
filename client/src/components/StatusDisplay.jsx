@@ -76,7 +76,7 @@ function StatusDisplay({ status, onRefresh, onCancelDownload, onRemoveScheduledS
 
       <div className="space-y-4">
         {/* Last Run */}
-        <div className="grid grid-cols-[140px_1fr] gap-4 items-start p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
+        <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-1 sm:gap-4 items-start p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
             Last Run:
           </span>
@@ -86,7 +86,7 @@ function StatusDisplay({ status, onRefresh, onCancelDownload, onRemoveScheduledS
         </div>
 
         {/* Last Completed */}
-        <div className="grid grid-cols-[140px_1fr] gap-4 items-start p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
+        <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-1 sm:gap-4 items-start p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
             Last Completed:
           </span>
@@ -112,27 +112,27 @@ function StatusDisplay({ status, onRefresh, onCancelDownload, onRemoveScheduledS
               {currentDownloads.map((download) => (
                 <div
                   key={download.id}
-                  className="p-2 bg-white dark:bg-[#2a2a2a] rounded border border-gray-200 dark:border-[#444444] flex items-start gap-2"
+                  className="p-2 bg-white dark:bg-[#2a2a2a] rounded border border-gray-200 dark:border-[#444444]"
                 >
-                  <div className="flex-1 min-w-0 gap-2">
-                    <div className="text-sm text-gray-900 dark:text-gray-100 font-medium wrap-break-word">
-                      {download.title}
-					  <a
-                        href={download.videoLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm mx-3 text-primary-600 dark:text-primary-400 hover:underline"
-                      >
-                        View →
-                      </a>
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-gray-900 dark:text-gray-100 font-medium wrap-break-word">
+                        {download.title}
+                        <a
+                          href={download.videoLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm mx-2 sm:mx-3 text-primary-600 dark:text-primary-400 hover:underline"
+                        >
+                          View →
+                        </a>
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Channel: {download.channelName || download.username} • Started: {formatDate(download.startTime)}
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Channel: {download.channelName || download.username} • Started: {formatDate(download.startTime)}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
                     <svg
-                      className="w-5 h-5 animate-spin text-amber-600 dark:text-amber-500"
+                      className="w-5 h-5 animate-spin text-amber-600 dark:text-amber-500 shrink-0"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -144,6 +144,8 @@ function StatusDisplay({ status, onRefresh, onCancelDownload, onRemoveScheduledS
                         d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                       />
                     </svg>
+                  </div>
+                  <div className="mt-2 flex justify-end">
                     <button
                       onClick={() => {
                         if (window.confirm(`Cancel download: ${download.title}?`)) {
@@ -175,31 +177,31 @@ function StatusDisplay({ status, onRefresh, onCancelDownload, onRemoveScheduledS
               {scheduledStreams.map((stream) => (
                 <div
                   key={stream.videoId}
-                  className="p-2 bg-white dark:bg-[#2a2a2a] rounded border border-gray-200 dark:border-[#444444] flex items-start gap-2"
+                  className="p-2 bg-white dark:bg-[#2a2a2a] rounded border border-gray-200 dark:border-[#444444]"
                 >
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm text-gray-900 dark:text-gray-100 font-medium wrap-break-word">
-                      {stream.title}
-                      <a
-                        href={stream.videoLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm mx-3 text-primary-600 dark:text-primary-400 hover:underline"
-                      >
-                        View →
-                      </a>
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-gray-900 dark:text-gray-100 font-medium wrap-break-word">
+                        {stream.title}
+                        <a
+                          href={stream.videoLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm mx-2 sm:mx-3 text-primary-600 dark:text-primary-400 hover:underline"
+                        >
+                          View →
+                        </a>
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Channel: {stream.channelName || stream.username} • Starts: {formatDate(stream.scheduledFor)}
+                        <span className="ml-2 text-purple-600 dark:text-purple-400 font-medium">
+                          ({formatRelativeTime(stream.scheduledFor)})
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Channel: {stream.channelName || stream.username} • Starts: {formatDate(stream.scheduledFor)}
-                      <span className="ml-2 text-purple-600 dark:text-purple-400 font-medium">
-                        ({formatRelativeTime(stream.scheduledFor)})
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
                     {/* Clock icon */}
                     <svg
-                      className="w-5 h-5 text-purple-500 dark:text-purple-400"
+                      className="w-5 h-5 text-purple-500 dark:text-purple-400 shrink-0"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -211,6 +213,8 @@ function StatusDisplay({ status, onRefresh, onCancelDownload, onRemoveScheduledS
                         d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                       />
                     </svg>
+                  </div>
+                  <div className="mt-2 flex justify-end">
                     <button
                       onClick={() => {
                         if (window.confirm(`Remove scheduled stream: ${stream.title}?`)) {

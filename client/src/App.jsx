@@ -213,12 +213,23 @@ function App() {
       />
 
       {/* Main Content with New Layout */}
-      <main className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
         {/* Three Column Layout: Left Sidebar (Keywords) | Center (Status) | Right Sidebar (Channels) */}
-        <div className="grid grid-cols-1 min-[1420px]:grid-cols-[380px_minmax(600px,1fr)_480px] gap-6">
+        <div className="grid grid-cols-1 min-[1420px]:grid-cols-[380px_minmax(600px,1fr)_480px] gap-4 sm:gap-6">
           
+          {/* Center - Download Status and History (shown first on mobile) */}
+          <div className="space-y-4 sm:space-y-6 min-w-0 order-first min-[1420px]:order-2">
+            <StatusDisplay
+              status={status}
+              onRefresh={handleRefresh}
+              onCancelDownload={handleCancelDownload}
+              onRemoveScheduledStream={handleRemoveScheduledStream}
+            />
+            <DownloadHistory history={history} onClearHistory={handleClearHistory} />
+          </div>
+
           {/* Left Sidebar - Keywords */}
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6 order-2 min-[1420px]:order-1">
             <KeywordList
               keywords={keywords}
               onAddKeyword={handleAddKeyword}
@@ -233,19 +244,8 @@ function App() {
             <YtdlpFlagsSettings />
           </div>
 
-          {/* Center - Download Status and History */}
-          <div className="space-y-6 min-w-0">
-            <StatusDisplay
-              status={status}
-              onRefresh={handleRefresh}
-              onCancelDownload={handleCancelDownload}
-              onRemoveScheduledStream={handleRemoveScheduledStream}
-            />
-            <DownloadHistory history={history} onClearHistory={handleClearHistory} />
-          </div>
-
           {/* Right Sidebar - Channels */}
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6 order-3">
             <ChannelList
               channels={channels}
               onAddChannel={handleAddChannel}
