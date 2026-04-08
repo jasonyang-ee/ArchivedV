@@ -17,7 +17,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Download history now shows a linked channel name beside the timestamp, new history entries persist channel metadata, and startup backfills older `db.json` history rows when channel info can be inferred
+- 
+
+## [1.7.3] - 2026-04-08
+
+### Added
+
+- Download history now shows a linked channel name beside the timestamp.
+
+### Changed
+
+- `db.json` new history entries persist channel metadata.
+- Migration for old `db.json` on startup by backfills history rows when channel info can be inferred from download folder structure.
 
 ## [1.7.2] - 2026-04-07
 
