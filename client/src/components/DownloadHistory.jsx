@@ -18,7 +18,7 @@ function DownloadHistory({ history, onClearHistory }) {
         )}
       </div>
 
-      <div className="space-y-1.5 max-h-[500px] overflow-y-auto">
+      <div className="space-y-1.5 max-h-125 overflow-y-auto">
         {history.length === 0 ? (
           <div className="text-center py-12 text-gray-500 dark:text-gray-400">
             <svg
@@ -48,7 +48,7 @@ function DownloadHistory({ history, onClearHistory }) {
               >
                 <div className="flex items-start gap-2">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 break-words">
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 wrap-break-word">
                       {item.title}
                     </p>
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-8 gap-y-1 text-xs">

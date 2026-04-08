@@ -5,16 +5,16 @@ services:
     restart: unless-stopped
     user: "1000:1000"
     ports:
-      - "3000:3000"
+      - "7000:3000"
     volumes:
       - ./data:/app/data
       - ./download:/app/download
-	    # - ./archivedv/cookies.txt:/app/data/youtube_cookies.txt:ro   Optional: If you want to manage cookies as a separate file on the host,
+    # - ./archivedv/cookies.txt:/app/data/youtube_cookies.txt:ro   Optional: If you want to manage cookies as a separate file on the host,
     environment:
       TZ: America/Los_Angeles
       # PUSHOVER_APP_TOKEN: ${PUSHOVER_APP_TOKEN}
       # PUSHOVER_USER_TOKEN: ${PUSHOVER_USER_TOKEN}
       # PORT: "3000"                                                 Optional: Default is 3000. Set to your desired internal port
-	    # TRUST_PROXY: "1"                                             Optional: Default is 1 (trust first proxy). Set to "false" if you are not behind a proxy
-	  # sysctls:                                                       Optional: Force disable ipv6 if you have issues with it
-	  #   - net.ipv6.conf.all.disable_ipv6=1
+      # TRUST_PROXY: "1"                                             Optional: Default is 1 (trust first proxy). Set to "false" if you are not behind a proxy
+      # sysctls:                                                       Optional: Force disable ipv6 if you have issues with it
+      #   - net.ipv6.conf.all.disable_ipv6=1
