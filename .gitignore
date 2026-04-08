@@ -21,3 +21,6 @@ npm-debug.log*
 
 # IDE
 .vscode/
+
+# Test
+.venv

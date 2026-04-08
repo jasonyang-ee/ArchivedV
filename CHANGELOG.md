@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- 
+- Download history now shows a linked channel name beside the timestamp, and new history entries persist channel metadata for future display
 
 ## [1.7.2] - 2026-04-07
 

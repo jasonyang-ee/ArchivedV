@@ -46,6 +46,32 @@ const router = express.Router();
 // Middleware
 router.use(express.json({ limit: "6mb" }));
 
+function buildChannelUrl(channelId, username) {
+  if (username) return `https://www.youtube.com/@${username}`;
+  if (channelId) return `https://www.youtube.com/channel/${channelId}`;
+  return null;
+}
+
+function normalizeHistoryItem(item, channelsById, channelsByUsername, singleChannel) {
+  const matchedChannel =
+    (item.channelId && channelsById.get(item.channelId)) ||
+    (item.username && channelsByUsername.get(item.username)) ||
+    (!item.channelId && !item.username && !item.channelName ? singleChannel : null);
+
+  const channelId = item.channelId || matchedChannel?.id || null;
+  const username = item.username || matchedChannel?.username || null;
+  const channelName = item.channelName || matchedChannel?.channelName || username || null;
+  const channelUrl = item.channelUrl || buildChannelUrl(channelId, username);
+
+  return {
+    ...item,
+    ...(channelId && { channelId }),
+    ...(username && { username }),
+    ...(channelName && { channelName }),
+    ...(channelUrl && { channelUrl }),
+  };
+}
+
 // API: Get config
 router.get("/api/config", (req, res) => {
   db.read();
@@ -428,7 +454,20 @@ router.delete("/api/downloads/:downloadId", (req, res) => {
 // API: Get history
 router.get("/api/history", (req, res) => {
   db.read();
-  res.json(db.data.history || []);
+  const channels = db.data.channels || [];
+  const channelsById = new Map(channels.map((channel) => [channel.id, channel]));
+  const channelsByUsername = new Map(
+    channels
+      .filter((channel) => channel.username)
+      .map((channel) => [channel.username, channel])
+  );
+  const singleChannel = channels.length === 1 ? channels[0] : null;
+
+  res.json(
+    (db.data.history || []).map((item) =>
+      normalizeHistoryItem(item, channelsById, channelsByUsername, singleChannel)
+    )
+  );
 });
 
 // API: Remove scheduled stream

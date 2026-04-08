@@ -108,6 +108,30 @@ export function computeNextAttempt(attempts) {
   return new Date(Date.now() + jitter(delay)).toISOString();
 }
 
+function buildChannelUrl(channelId, username) {
+  if (username) return `https://www.youtube.com/@${username}`;
+  if (channelId) return `https://www.youtube.com/channel/${channelId}`;
+  return null;
+}
+
+function buildHistoryEntry(downloadInfo, extra = {}) {
+  const channelId = downloadInfo.channel || downloadInfo.channelId;
+  const username = downloadInfo.username || null;
+  const channelName = downloadInfo.channelName || downloadInfo.username || null;
+  const channelUrl = buildChannelUrl(channelId, username);
+
+  return {
+    title: downloadInfo.title,
+    time: nowIso(),
+    videoId: downloadInfo.videoId,
+    ...(channelId && { channelId }),
+    ...(username && { username }),
+    ...(channelName && { channelName }),
+    ...(channelUrl && { channelUrl }),
+    ...extra,
+  };
+}
+
 // --- Scheduled Stream helpers ---
 
 /**
@@ -276,7 +300,7 @@ function handleDownloadSuccess(dir, downloadInfo, note = null) {
       push.send({ message, title: downloadInfo.title }, () => {});
     }
     db.read();
-    db.data.history.push({ title: downloadInfo.title, time: nowIso(), ...(note && { note }) });
+    db.data.history.push(buildHistoryEntry(downloadInfo, note ? { note } : {}));
     db.data.retryQueue = (db.data.retryQueue || []).filter(
       (j) => !(j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId)
     );
@@ -519,14 +543,10 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
         db.data.retryQueue = (db.data.retryQueue || []).filter(
           (j) => !(j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId)
         );
-        db.data.history.push({
-          title: downloadInfo.title,
-          time: nowIso(),
+        db.data.history.push(buildHistoryEntry(downloadInfo, {
           status: "skipped",
           reason: `auth_failed_${authFailure.reason}`,
-          videoId: downloadInfo.videoId,
-          channelId: downloadInfo.channel,
-        });
+        }));
         db.write();
 
         console.warn(
