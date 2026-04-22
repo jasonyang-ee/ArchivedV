@@ -1,0 +1,32 @@
+name: 'Cleanup GHCR Untagged Images'
+
+on:
+  workflow_run:
+    workflows: ['Release', 'Check']
+    types: [completed]
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: cleanup-ghcr-untagged
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete untagged GHCR versions
+        uses: actions/delete-package-versions@v5
+        with:
+          owner: ${{ github.repository_owner }}
+          package-name: iclib
+          package-type: container
+          min-versions-to-keep: 0
+          delete-only-untagged-versions: 'true'
+          token: ${{ secrets.TOKEN_GITHUB != '' && secrets.TOKEN_GITHUB || github.token }}
