@@ -24,7 +24,9 @@ goal: fix rate-limit dead-config BLOCK + 5 HARDENs from review-code v1.6.0→HEA
 | F2 | BLOCK-1 + HARDEN-1,3,5 | F1 | rate limit uses config; helper extracted; week unit works; title→videoId |
 | F3 | HARDEN-4 + SPEC §V.6 amend | F2 | history enrichment consistent; V6 corrected |
 | F4 | unit tests for parseScheduledTime, computeNextAttempt, classifyYtDlpAuthFailure, migrateHistoryEntries | F3 | all new tests green |
-| F5 | final verification: code vs SPEC + PLAN | F4 | no drift, CHANGELOG updated |
+| F6 | fix dir propagation in scheduledStream → retryQueue path | F4 | ∀ promoted stream → dir has date prefix |
+| F7 | fix release.sh bugs + best-practice alignment | - | ∀ V22-V24 hold; dry-run correct |
+| F5 | final verification: code vs SPEC + PLAN | F4,F6,F7 | no drift, CHANGELOG updated |
 
 ---
 
@@ -99,18 +101,79 @@ next: F5
 
 ---
 
+## F6 fix scheduled-stream dir propagation
+task: T21
+goal: ∀ promoted scheduledStream → retryQueue job dir includes date prefix
+inputs: `server/downloader.js` (`addScheduledStream`, call at ~L576), `server/scheduler.js` (`processScheduledStreams`), SPEC.md §V.21
+findings (pre-researched):
+- `addScheduledStream(info, scheduledFor)` ⊥ accepts/stores `dir`; entry object omits it
+- caller at `downloader.js:576` ⊥ passes `dir` (in-scope at that point)
+- `processScheduledStreams` calls `upsertRetryJob({...stream})` ⊥ `dir` field → job.dir=undefined → fallback path ⊥ date prefix
+steps:
+1. `downloader.js:addScheduledStream`: add `dir: info.dir` to the `entry` object literal
+2. `downloader.js:576` `addScheduledStream` call: add `dir` to the info object passed (variable `dir` is in scope)
+3. `scheduler.js:processScheduledStreams` `upsertRetryJob` call: add `dir: stream.dir` to the job object
+4. smoke-test: `node server/index.js` starts without error
+verification: grep `stream.dir` in scheduler.js; grep `dir: info.dir` in downloader.js addScheduledStream; grep `dir` in addScheduledStream call site
+exit: all 3 sites patched; server starts cleanly
+next: F5
+
+---
+
+## F7 fix release.sh
+task: T22
+goal: fix bugs + align with best-practice reference
+inputs: `release.sh`, `.github/workflows/release.yml`, reference example (user-provided)
+findings (research done inline):
+- `set -e` only → missing `-u`, `-o pipefail`
+- `echo -e` + `'\033[...'` → not portable; use `$'\033[...'` (no -e needed)
+- uncommitted changes: soft warning w/ override → hard stop (tag must match committed tree)
+- CHANGELOG awk: inserts empty template inside [Unreleased]; existing content falls under new version (works) but leaves duplicate template headers → replace with reference approach (leave [Unreleased] heading only, content flows naturally)
+- no empty-changelog guard → can release with only `- ` placeholders → guard required
+- no tag existence check → cryptic `git tag` error → pre-check required
+- no `--dry-run` flag → can't preview plan
+- no tests step → release without verification
+- `git push --tags` → pushes ALL tags → push only new tag by name
+- `read -p` without `-r` → backslash mangling
+- `CHANGELOG.md.bak` temp file → fragile; use `CHANGELOG.md.tmp` + mv pattern only
+- `gh` hard dep required (workflow's publish-release job does `gh release edit --draft=false`; release must exist as draft)
+steps:
+1. `set -e` → `set -euo pipefail`
+2. rewrite color vars: `RED=$'\033[0;31m'` etc. (no echo -e needed; use plain `echo`)
+3. add `--dry-run/-n` flag parsing; when true → print plan, exit 0 ⊥ touch anything
+4. preflight: add `command -v node >/dev/null || die "node not installed"`
+5. uncommitted changes check: remove override prompt → `die "uncommitted changes — commit or stash them first"`
+6. add tag existence pre-check: `git rev-parse -q --verify "refs/tags/${TAG}" && die "tag ${TAG} already exists"`
+7. empty changelog guard: extract [Unreleased] non-header non-blank non-placeholder lines; `[ -z ... ] && die "CHANGELOG.md [Unreleased] section is empty"`
+8. show release notes preview (`$UNRELEASED_BODY`) before confirmation prompt
+9. add `--yes` handling to dry-run output message
+10. add `npm test` step (before file mutations); on fail → `die "tests red — not releasing"`
+11. fix CHANGELOG awk: reference approach — `## [Unreleased]` stays, new version heading inserted after it; existing content naturally follows; ⊥ inject template
+12. add CHANGELOG link-def update: replace `[Unreleased]:` line with compare URL; append `[NEW_VERSION]:` release URL
+13. add mirror-gate verify (grep for new version in CHANGELOG + node version check) before `git add`
+14. fix `read -r -p` ∀ prompts
+15. `git push --tags` → `git push -q origin "$CURRENT_BRANCH"` then `git push -q origin "$TAG"` (separate)
+16. dry-run exit path: show `Would: test → bump ${NEW_VERSION} → changelog → commit → tag ${TAG} → push`
+verify: `./release.sh --dry-run` shows correct plan; `./release.sh --dry-run --major` shows correct major bump; CHANGELOG guard blocks empty section; hard stop on dirty tree
+exit: ∀ V22-V24 hold; script shellcheck-clean on critical paths
+next: F5
+
+---
+
 ## F5 final verification
 task: T20
 goal: confirm code matches SPEC; CHANGELOG updated; no drift
 inputs: SPEC.md, PLAN.md, all changed files, test results
 steps:
-1. re-read §V (V1-V20) against current code; verify each holds
+1. re-read §V (V1-V24) against current code; verify each holds
 2. confirm §V.6 accurately reflects in-memory authSkipCache behavior
 3. verify rate limit config constants wired in routes.js (grep check)
-4. run `npm test` → green
-5. run `node server/index.js` → starts without error
-6. update `CHANGELOG.md` `## [Unreleased]` with all fixes from F2-F4
-7. commit all changes (single summary commit)
+4. verify §V.21: grep `stream.dir` in scheduler.js; grep `dir: info.dir` in addScheduledStream; confirm fallback path unreachable for promoted streams
+5. verify §V.22-V24: read release.sh; confirm npm test present; confirm empty guard present; confirm push pattern correct
+6. run `npm test` → green
+7. run `node server/index.js` → starts without error
+8. update `CHANGELOG.md` `## [Unreleased]` with all fixes from F2-F4+F6+F7
+9. commit all changes (single summary commit)
 verification: SPEC §V all hold; tests green; CHANGELOG has entries; no console errors on start
 exit: clean commit, all findings addressed
 next: ∅ (cycle done → /garnish)

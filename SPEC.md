@@ -26,6 +26,10 @@ Monitor YouTube channels via RSS; auto-download matching live streams & videos u
 - Auth via Netscape-format cookies file only. ⊥ OAuth.
 - Download dir: `./download/{username}/{sanitized_date_title}/`.
 - Server port default `3000`. Configurable via env.
+- File naming: `camelCase.js` server modules, `PascalCase.jsx` React components.
+- Naming: `camelCase` vars/functions, `PascalCase` components, `snake_case` DB columns.
+- Server module files: `{entity}Controller.js`, `{name}Service.js`, `{entity}.js` (routes).
+- Client files: `{PageName}.jsx` (pages), `{ComponentName}.jsx` (components).
 
 ## §I INTERFACES
 
@@ -98,6 +102,12 @@ ytdlpFlags: string
 - Polls `GET /api/status` + `GET /api/history` every 5s
 - Dev proxy: `http://localhost:3000/api`
 
+### Scripts
+- `./start.sh` → install deps, build client, create data/download dirs, run dev servers
+- `node server/index.js` → start server only
+- `cd client && npm run build` → build client
+- `./release.sh` → release new version
+
 ## §V INVARIANTS
 
 V1: ∀ video in retryQueue → key=`${channelId}-${videoId}` unique; dupes overwrite, ⊥ append
@@ -120,6 +130,10 @@ V17: ∀ server log → ASCII only, format `[LEVEL] [ServiceName] Message`
 V18: corrupt fragment (<1KB) on merge fail → delete to unblock yt-dlp re-download
 V19: ⊥ delete final video files during cleanup; only `.f{N}.{ext}`, `.ytdl`, `-Frag###` deleted
 V20: `POST /ytdlp-flags` → reject flags containing `--exec`, `--config-location`, `--batch-file`
+V21: `dir` path ∀ scheduledStream → persisted in `scheduledStreams[]` entry; forwarded verbatim on promote to retryQueue; ⊥ fallback to undated path
+V22: `release.sh` ! run `npm test` before any file mutation; red tests → die, ⊥ release
+V23: `release.sh` ! guard [Unreleased] section non-empty (strip blank + `###` headers + bare `- ` placeholders) before creating release; empty → die
+V24: `release.sh` git push ! push branch + tag separately (`git push origin $branch` & `git push origin $tag`); ⊥ `git push --tags`
 
 ## §T TASKS
 
@@ -145,9 +159,12 @@ V20: `POST /ytdlp-flags` → reject flags containing `--exec`, `--config-locatio
 | T18 | . | F3: HARDEN-4 history enrichment + §V.6 amend | V6 |
 | T19 | . | F4: unit tests parseScheduledTime/computeNextAttempt/classifyYtDlpAuthFailure/migrateHistoryEntries | - |
 | T20 | . | F5: final verify code vs SPEC + CHANGELOG | - |
+| T21 | . | F6: fix dir propagation in addScheduledStream + processScheduledStreams | V21,V9 |
+| T22 | . | F7: fix release.sh bugs + align with best-practice example | V22,V23,V24 |
 
 ## §B BUGS
 
 | id | date | cause | fix |
 |----|------|-------|-----|
 | B1 | 2026-03-07 | cron thread blocked main server thread during feed refresh | replaced cron with `setInterval`; §V.17 |
+| B2 | 2026-07-17 | `addScheduledStream` ⊥ accept/store `dir`; `processScheduledStreams` ⊥ pass `stream.dir` on promote → scheduled folder ⊥ date prefix | §V.21 |
