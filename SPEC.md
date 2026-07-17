@@ -134,6 +134,10 @@ V21: `dir` path ∀ scheduledStream → persisted in `scheduledStreams[]` entry;
 V22: `release.sh` ! run `npm test` before any file mutation; red tests → die, ⊥ release
 V23: `release.sh` ! guard [Unreleased] section non-empty (strip blank + `###` headers + bare `- ` placeholders) before creating release; empty → die
 V24: `release.sh` git push ! push branch + tag separately (`git push origin $branch` & `git push origin $tag`); ⊥ `git push --tags`
+V25: devcontainer ! forward ports 3000 (API) & 5173 (Vite); ⊥ omit 5173
+V26: devcontainer node_modules ! live in named Docker volume; ⊥ overridden by workspace bind mount; `postCreateCommand` ! run `npm install`
+V27: `cleanup-ghcr.yml` `package-name` ! = `archivedv`; ⊥ hardcode other repo names; cleanup `if` ! check only `conclusion == 'success'`
+V28: `dependabot.yml` `open-pull-requests-limit` ! = `0` ∀ ecosystems; security alert scanning ⊥ affected (repo Settings control); ⊥ expose dependency drift via public PRs
 
 ## §T TASKS
 
@@ -161,6 +165,9 @@ V24: `release.sh` git push ! push branch + tag separately (`git push origin $bra
 | T20 | . | F5: final verify code vs SPEC + CHANGELOG | - |
 | T21 | . | F6: fix dir propagation in addScheduledStream + processScheduledStreams | V21,V9 |
 | T22 | . | F7: fix release.sh bugs + align with best-practice example | V22,V23,V24 |
+| T23 | . | F8: fix devcontainer (base image, node_modules volume, ports, postCreateCommand, extensions) | V25,V26 |
+| T24 | . | F9: fix CONTRIBUTING.md (accuracy, devcontainer section, correct commands) | - |
+| T25 | . | F10: fix cleanup-ghcr.yml (wrong package-name) + dependabot.yml (disable auto-PRs) | V27,V28 |
 
 ## §B BUGS
 

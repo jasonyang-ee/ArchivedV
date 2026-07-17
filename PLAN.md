@@ -26,7 +26,10 @@ goal: fix rate-limit dead-config BLOCK + 5 HARDENs from review-code v1.6.0→HEA
 | F4 | unit tests for parseScheduledTime, computeNextAttempt, classifyYtDlpAuthFailure, migrateHistoryEntries | F3 | all new tests green |
 | F6 | fix dir propagation in scheduledStream → retryQueue path | F4 | ∀ promoted stream → dir has date prefix |
 | F7 | fix release.sh bugs + best-practice alignment | - | ∀ V22-V24 hold; dry-run correct |
-| F5 | final verification: code vs SPEC + PLAN | F4,F6,F7 | no drift, CHANGELOG updated |
+| F8 | fix devcontainer (base image, node_modules, ports, extensions) | - | container opens clean; ports forward; npm install runs |
+| F9 | fix CONTRIBUTING.md (accuracy + devcontainer section) | F8 | all commands accurate; devcontainer onboarding documented |
+| F10 | fix cleanup-ghcr.yml (wrong package-name) + dependabot.yml (disable auto-PRs) | - | untagged GHCR images deleted; ⊥ public PRs opened |
+| F5 | final verification: code vs SPEC + PLAN | F4,F6,F7,F8,F9,F10 | no drift, CHANGELOG updated |
 
 ---
 
@@ -160,19 +163,98 @@ next: F5
 
 ---
 
+## F8 fix devcontainer
+task: T23
+goal: working devcontainer for contributors; zero manual setup after `Reopen in Container`
+inputs: `.devcontainer/Dockerfile`, `.devcontainer/devcontainer.json`, `package.json`, `docker-compose.yml`
+findings (research done inline):
+- `node:24-trixie` base ⊥ devcontainer tooling (zsh, git extras, locale) → use `mcr.microsoft.com/devcontainers/javascript-node:24-bookworm`
+- `workspaceMount` `/app` bind → overwrites `npm ci` node_modules from image → zero modules on container open
+- `mounts` lists `data` + `download` separately → redundant (workspace mount already covers them)
+- port 5173 (Vite) ⊥ forwarded → contributor browser hit fails on hot-reload URL
+- `postCreateCommand` absent → contributor must manually `npm install` & `mkdir data download`
+- VS Code extensions: missing ESLint (`dbaeumer.vscode-eslint`), REST Client (`humao.rest-client`), GitLens (`eamodio.gitlens`), Error Lens (`usernamehm.errorlens`); TS extension redundant (JS-only project)
+steps:
+1. `.devcontainer/Dockerfile`: replace `FROM node:24-trixie AS dev` → `FROM mcr.microsoft.com/devcontainers/javascript-node:24-bookworm`; remove `npm ci` + `COPY` steps (workspace mount + postCreateCommand handles deps); keep yt-dlp + ffmpeg + system dep install block; keep verify step; keep `WORKDIR /app`; remove final `COPY . .` + `CMD`
+2. `.devcontainer/devcontainer.json`: remove redundant `data` + `download` entries from `mounts`; add named volume mount for node_modules: `"source=archivedv-node_modules,target=/app/node_modules,type=volume"`; add 5173 to `forwardPorts`; add `postCreateCommand`: `"npm install && mkdir -p data download"`; replace extensions list with: `esbenp.prettier-vscode`, `dbaeumer.vscode-eslint`, `humao.rest-client`, `eamodio.gitlens`, `bradlc.vscode-tailwindcss`, `usernamehm.errorlens`; add `"remoteUser": "node"`
+verify: `docker build -f .devcontainer/Dockerfile .` succeeds; devcontainer.json valid JSON; ports 3000+5173 in forwardPorts
+exit: ∀ V25-V26 hold; clean build, no dangling temp files
+next: F9
+
+---
+
+## F9 fix CONTRIBUTING.md
+task: T24
+goal: accurate contributor guide; devcontainer as primary onboarding path
+inputs: `.github/CONTRIBUTING.md`, `package.json`, `docker-compose.yml`, `release.sh`, `.devcontainer/`
+findings (research done inline):
+- release script path wrong: `./scripts/create-release.sh` → `./release.sh`
+- `VERSIONING.md` referenced but ⊥ exists → replace with `CHANGELOG.md` + inline release info
+- `start.bat` referenced but ⊥ exists → remove; `./start.sh` only
+- `docker-compose exec app ...` → container name is `archivedv`; ⊥ `app`
+- `npm run test` / `npm run format` → ⊥ scripts in package.json → remove or note as planned
+- husky setup recommended but ⊥ installed → remove
+- external docker-compose port = 7000 (not 3000); CONTRIBUTING says 3000 → fix
+- devcontainer section absent → add as primary onboarding path (zero-install)
+- env vars for contributors (PUSHOVER tokens) not documented → add brief section
+steps:
+1. Add **Dev Container** section at top of Setup block; explain: install Docker + VS Code + Dev Containers extension → `Reopen in Container` → `npm run dev` (or auto-starts via `postStartCommand`) → frontend `http://localhost:5173`, backend `http://localhost:3000`
+2. Remove `start.bat` reference; keep `./start.sh` for Linux/macOS local path
+3. Fix `docker-compose` ports: external `7000` → `http://localhost:7000`; internal `3000` for API
+4. Fix `docker-compose exec` container name: `app` → `archivedv`
+5. Remove `npm run test` / `docker-compose exec app npm run test` — no test script yet; replace with `npm run build` build verification
+6. Remove `npm run format` — no format script; note Prettier used via editor integration
+7. Remove husky setup block
+8. Fix release script path: `./scripts/create-release.sh` → `./release.sh`; remove `VERSIONING.md` link; inline the release types table
+9. Add **Environment Variables** section: list optional env vars (PUSHOVER tokens, PORT, etc.) with defaults; point to `docker-compose.yml` comments
+10. Fix `ms-vscode.vscode-typescript-next` mention if any → remove (JS project)
+verify: every `bash` block command exists in repo; every URL/port matches actual config; no broken file references
+exit: CONTRIBUTING.md accurate end-to-end; devcontainer is first onboarding option
+next: F5
+
+---
+
+## F10 fix CI/CD: cleanup-ghcr + dependabot
+task: T25
+goal: correct GHCR cleanup package name; disable dependabot auto-PRs while preserving scanning
+inputs: `.github/workflows/cleanup-ghcr.yml`, `.github/dependabot.yml`, `release.yml` (for GHCR image name)
+findings (research done inline):
+CRITICAL: `cleanup-ghcr.yml` has `package-name: iclib` → wrong; GHCR image = `archivedv`; cleanup silently did nothing since creation
+`if` condition checks `event == 'push'` unnecessarily; simplify to just `conclusion == 'success'`
+Check workflow pushes to DockerHub only (⊥ GHCR) → cleanup trigger from Check is harmless but unnecessary; keep for symmetry
+`dependabot.yml` `open-pull-requests-limit: 10/5/5` → opens public PRs exposing dependency drift
+Setting to 0 → scan still runs; dependency graph visible in GitHub Insights → Dependency graph → Dependabot; ⊥ breaks security alerts
+Security alerts (Dependabot alerts/CVE scanning) = separate GitHub repo Settings feature ⊥ controlled by this file
+! repo owner must: Settings → Security → Code security → keep "Dependabot alerts" ON, turn "Dependabot security updates" OFF (auto-fix PRs) → UI change only, ⊥ YAML change possible
+steps:
+1. `cleanup-ghcr.yml`: fix `package-name: iclib` → `archivedv`
+2. `cleanup-ghcr.yml`: simplify `if` condition: `github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'`
+3. `dependabot.yml` npm ecosystem: set `open-pull-requests-limit: 0`; remove `reviewers`, `labels`, `commit-message`, `allow` (irrelevant when no PRs)
+4. `dependabot.yml` docker ecosystem: set `open-pull-requests-limit: 0`; remove `reviewers`, `labels`, `commit-message`
+5. `dependabot.yml` github-actions ecosystem: set `open-pull-requests-limit: 0`; remove `reviewers`, `labels`, `commit-message`
+6. keep `schedule`, `directory`, `ignore` blocks ∀ ecosystems (scan still runs on schedule)
+note: repo owner ! manually disable "Dependabot security updates" in GitHub Settings → Security → Code security (cannot be done via YAML)
+verify: `cleanup-ghcr.yml` package-name = `archivedv`; `dependabot.yml` ∀ ecosystems have `open-pull-requests-limit: 0`; valid YAML
+exit: ∀ V27-V28 hold; no active PR-opening vectors remain
+next: F5
+
+---
+
 ## F5 final verification
 task: T20
 goal: confirm code matches SPEC; CHANGELOG updated; no drift
 inputs: SPEC.md, PLAN.md, all changed files, test results
 steps:
-1. re-read §V (V1-V24) against current code; verify each holds
+1. re-read §V (V1-V26) against current code; verify each holds
 2. confirm §V.6 accurately reflects in-memory authSkipCache behavior
 3. verify rate limit config constants wired in routes.js (grep check)
 4. verify §V.21: grep `stream.dir` in scheduler.js; grep `dir: info.dir` in addScheduledStream; confirm fallback path unreachable for promoted streams
 5. verify §V.22-V24: read release.sh; confirm npm test present; confirm empty guard present; confirm push pattern correct
-6. run `npm test` → green
+6. verify §V.25-V26: read devcontainer.json; confirm ports 3000+5173 forwarded; confirm node_modules volume mount present; confirm postCreateCommand present
+7. verify §V.27-V28: read cleanup-ghcr.yml (package-name=archivedv); read dependabot.yml (open-pull-requests-limit=0 ∀)
+8. run `npm test` → green
 7. run `node server/index.js` → starts without error
-8. update `CHANGELOG.md` `## [Unreleased]` with all fixes from F2-F4+F6+F7
+9. update `CHANGELOG.md` `## [Unreleased]` with all fixes from F2-F4+F6+F7+F8+F9+F10
 9. commit all changes (single summary commit)
 verification: SPEC §V all hold; tests green; CHANGELOG has entries; no console errors on start
 exit: clean commit, all findings addressed
