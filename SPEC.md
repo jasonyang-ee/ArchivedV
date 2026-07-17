@@ -158,7 +158,7 @@ V28: `dependabot.yml` `open-pull-requests-limit` ! = `0` ∀ ecosystems; securit
 | T13 | x | Mobile-responsive layout | - |
 | T14 | x | Date format preference (YYYY-MM-DD \| MM-DD-YYYY) | - |
 | T15 | . | ? further features / bug fixes | - |
-| T16 | . | F1 research: confirm call sites + test runner | - |
+| T16 | x | F1 research: confirm call sites + test runner | - |
 | T17 | . | F2: BLOCK-1 rate limit + HARDEN 1,3,5 | V15,V20 |
 | T18 | . | F3: HARDEN-4 history enrichment + §V.6 amend | V6 |
 | T19 | . | F4: unit tests parseScheduledTime/computeNextAttempt/classifyYtDlpAuthFailure/migrateHistoryEntries | - |

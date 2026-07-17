@@ -44,6 +44,12 @@ steps:
 4. confirm `routes.js` already imports from `./config.js` (pattern exists)
 5. confirm no test infra exists yet; note chosen test runner (vitest or node:test)
 6. record findings; update later phase steps if call sites differ from expected
+findings:
+- `buildChannelUrl` currently duplicated in `server/routes.js:49`, `server/database.js:21`, and `server/downloader.js:111`; no other server call sites found.
+- `parseScheduledTime` defined/exported in `server/downloader.js:141` and called only by the close handler at `server/downloader.js:574`; default export exposure at `server/downloader.js:786` is not a second caller.
+- `server/utils.js` uses named `export function` declarations plus a default export object; F2 should add the helper using the existing named-export style and update the default object.
+- `server/routes.js` already imports config constants from `./config.js`; F2 can extend that import with the rate-limit constants.
+- No test script, test directory, Vitest, or other test runner exists in `package.json`/CI; F4 should use built-in `node:test` with a new `npm test` script.
 verification: findings logged; F2 steps adjusted if needed
 exit: confirmed call site map, no blocking unknown
 next: F2
