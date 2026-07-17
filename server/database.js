@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { DB_PATH, DATA_DIR, DOWNLOAD_DIR } from "./config.js";
-import { sanitize } from "./utils.js";
+import { buildChannelUrl, sanitize } from "./utils.js";
 
 function createDefaultData() {
   return {
@@ -16,12 +16,6 @@ function createDefaultData() {
     auth: { useCookies: false },
     ytdlpFlags: '',
   };
-}
-
-function buildChannelUrl(channelId, username) {
-  if (username) return `https://www.youtube.com/@${username}`;
-  if (channelId) return `https://www.youtube.com/channel/${channelId}`;
-  return null;
 }
 
 function stripDatePrefix(folderName) {

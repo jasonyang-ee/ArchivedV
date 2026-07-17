@@ -10,6 +10,7 @@ import {
   markAuthSkipped,
 } from "./auth.js";
 import {
+  buildChannelUrl,
   nowIso,
   jitter,
   isFinalVideoFile,
@@ -108,12 +109,6 @@ export function computeNextAttempt(attempts) {
   return new Date(Date.now() + jitter(delay)).toISOString();
 }
 
-function buildChannelUrl(channelId, username) {
-  if (username) return `https://www.youtube.com/@${username}`;
-  if (channelId) return `https://www.youtube.com/channel/${channelId}`;
-  return null;
-}
-
 function buildHistoryEntry(downloadInfo, extra = {}) {
   const channelId = downloadInfo.channel || downloadInfo.channelId;
   const username = downloadInfo.username || null;
@@ -145,7 +140,7 @@ export function parseScheduledTime(stderr) {
   //   "This live event will begin in 30 minutes."
   //   "This live event will begin in 1 day."
   const match = stderr.match(
-    /This live event will begin in (?:about )?(\d+)\s+(minute|hour|day)s?/i
+    /This live event will begin in (?:about )?(\d+)\s+(minute|hour|day|week)s?/i
   );
   if (!match) return null;
 
@@ -155,6 +150,7 @@ export function parseScheduledTime(stderr) {
   if (unit === "minute") ms = amount * 60 * 1000;
   else if (unit === "hour") ms = amount * 60 * 60 * 1000;
   else if (unit === "day") ms = amount * 24 * 60 * 60 * 1000;
+  else if (unit === "week") ms = amount * 7 * 24 * 60 * 60 * 1000;
 
   return new Date(Date.now() + ms).toISOString();
 }

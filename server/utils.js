@@ -20,6 +20,12 @@ export function normalizeError(err) {
   return { statusCode, code, message };
 }
 
+export function buildChannelUrl(channelId, username) {
+  if (username) return `https://www.youtube.com/@${username}`;
+  if (channelId) return `https://www.youtube.com/channel/${channelId}`;
+  return null;
+}
+
 // Sanitize titles for filesystem
 export function sanitize(str) {
   return str.replace(/[\/\\:*?"<>|]/g, "").trim();
@@ -87,6 +93,7 @@ export default {
   jitter,
   nowIso,
   normalizeError,
+  buildChannelUrl,
   sanitize,
   isValidYouTubeUrl,
   isLoopbackIp,

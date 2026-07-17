@@ -17,7 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- 
+- Rate-limit settings now honor configured limits; shared channel URL generation,
+  scheduled-week parsing, and video ID download deduplication are corrected.
 
 ## [1.7.3] - 2026-04-08
 

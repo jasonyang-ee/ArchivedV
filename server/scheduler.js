@@ -458,7 +458,10 @@ export async function checkUpdates() {
 
           // CHECK 1: Is this video currently being downloaded by an active process?
           for (const [downloadId, download] of activeDownloads.entries()) {
-            if (download.downloadInfo.channel === ch.id && download.downloadInfo.title === title) {
+            if (
+              download.downloadInfo.channel === ch.id &&
+              download.downloadInfo.videoId === videoId
+            ) {
               isCurrentlyDownloading = true;
               break;
             }

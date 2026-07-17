@@ -8,7 +8,7 @@ import { Parser, processors } from "xml2js";
 import db from "./database.js";
 import { autoMerge } from "./merger.js";
 import { clearAuthSkipCache } from "./auth.js";
-import { isValidYouTubeUrl, sanitize } from "./utils.js";
+import { buildChannelUrl, isValidYouTubeUrl, sanitize } from "./utils.js";
 import {
   status,
   activeDownloads,
@@ -17,7 +17,12 @@ import {
   safeCleanupDirectory,
 } from "./downloader.js";
 import { checkUpdates } from "./scheduler.js";
-import { YTDLP_COOKIES_PATH, DOWNLOAD_DIR } from "./config.js";
+import {
+  AUTH_RATELIMIT_MAX,
+  DOWNLOAD_DIR,
+  STATIC_RATELIMIT_MAX,
+  YTDLP_COOKIES_PATH,
+} from "./config.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,13 +30,13 @@ const __dirname = path.dirname(__filename);
 // Rate limiters
 const authFsLimiter = rateLimit({
   windowMs: 60_000,
-  max: 20,
+  max: AUTH_RATELIMIT_MAX,
   message: { error: "Too many auth requests, slow down" },
 });
 
 const staticFsLimiter = rateLimit({
   windowMs: 1_000,
-  max: 50,
+  max: STATIC_RATELIMIT_MAX,
   message: { error: "Too many requests, slow down" },
 });
 
@@ -45,12 +50,6 @@ const router = express.Router();
 
 // Middleware
 router.use(express.json({ limit: "6mb" }));
-
-function buildChannelUrl(channelId, username) {
-  if (username) return `https://www.youtube.com/@${username}`;
-  if (channelId) return `https://www.youtube.com/channel/${channelId}`;
-  return null;
-}
 
 function normalizeHistoryItem(item, channelsById, channelsByUsername, singleChannel) {
   const matchedChannel =

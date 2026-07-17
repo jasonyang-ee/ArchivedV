@@ -159,7 +159,7 @@ V28: `dependabot.yml` `open-pull-requests-limit` ! = `0` ∀ ecosystems; securit
 | T14 | x | Date format preference (YYYY-MM-DD \| MM-DD-YYYY) | - |
 | T15 | . | ? further features / bug fixes | - |
 | T16 | x | F1 research: confirm call sites + test runner | - |
-| T17 | . | F2: BLOCK-1 rate limit + HARDEN 1,3,5 | V15,V20 |
+| T17 | x | F2: BLOCK-1 rate limit + HARDEN 1,3,5 | V15,V20 |
 | T18 | . | F3: HARDEN-4 history enrichment + §V.6 amend | V6 |
 | T19 | . | F4: unit tests parseScheduledTime/computeNextAttempt/classifyYtDlpAuthFailure/migrateHistoryEntries | - |
 | T20 | . | F5: final verify code vs SPEC + CHANGELOG | - |
