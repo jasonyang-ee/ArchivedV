@@ -63,7 +63,7 @@ export function buildDownloadTitleMap(channels) {
   return titleMap;
 }
 
-function migrateHistoryEntries(data) {
+export function migrateHistoryEntries(data) {
   const history = Array.isArray(data.history) ? data.history : [];
   const channels = Array.isArray(data.channels) ? data.channels : [];
 

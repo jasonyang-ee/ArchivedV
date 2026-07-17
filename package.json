@@ -17,6 +17,7 @@
     "server:dev": "nodemon --watch server --exec \"node server/index.js\"",
     "client:dev": "cd client && vite",
     "build": "cd client && vite build",
+    "test": "node --test server/tests/**/*.test.js",
     "start": "node server/index.js"
   },
   "dependencies": {

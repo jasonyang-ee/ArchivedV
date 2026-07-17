@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   scheduled-week parsing, and video ID download deduplication are corrected.
 - History responses now use the same folder-based channel enrichment as startup
   migration.
+- Added built-in unit coverage for scheduling, retry backoff, auth classification,
+  and history migration.
 
 ## [1.7.3] - 2026-04-08
 
