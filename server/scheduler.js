@@ -108,6 +108,7 @@ export async function processScheduledStreams() {
           username: stream.username,
           channelName: stream.channelName,
           videoLink: stream.videoLink,
+          dir: stream.dir,
         },
         {
           nextAttemptAt: nowIso(),

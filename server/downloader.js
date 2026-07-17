@@ -179,6 +179,7 @@ export function addScheduledStream(info, scheduledFor) {
     username: info.username,
     channelName: info.channelName,
     videoLink: info.videoLink,
+    dir: info.dir,
     scheduledFor,
     detectedAt: idx === -1 ? nowIso() : db.data.scheduledStreams[idx].detectedAt,
     lastCheckedAt: nowIso(),
@@ -577,6 +578,7 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
             username: downloadInfo.username,
             channelName: downloadInfo.channelName,
             videoLink,
+            dir,
           },
           scheduledFor
         );
