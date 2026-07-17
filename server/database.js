@@ -22,14 +22,14 @@ function stripDatePrefix(folderName) {
   return folderName.replace(/^\[\d{2,4}-\d{2}-\d{2,4}\]\s*/, "");
 }
 
-function normalizeHistoryTitle(title) {
+export function normalizeHistoryTitle(title) {
   return sanitize(String(title || ""))
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
 }
 
-function buildDownloadTitleMap(channels) {
+export function buildDownloadTitleMap(channels) {
   const titleMap = new Map();
 
   for (const channel of channels) {

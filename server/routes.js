@@ -5,7 +5,7 @@ import axios from "axios";
 import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
 import { Parser, processors } from "xml2js";
-import db from "./database.js";
+import db, { buildDownloadTitleMap, normalizeHistoryTitle } from "./database.js";
 import { autoMerge } from "./merger.js";
 import { clearAuthSkipCache } from "./auth.js";
 import { buildChannelUrl, isValidYouTubeUrl, sanitize } from "./utils.js";
@@ -51,10 +51,15 @@ const router = express.Router();
 // Middleware
 router.use(express.json({ limit: "6mb" }));
 
-function normalizeHistoryItem(item, channelsById, channelsByUsername, singleChannel) {
+function normalizeHistoryItem(item, channelsById, channelsByUsername, singleChannel, titleMap) {
+  const titleMatches =
+    !item.channelId && !item.username && !item.channelName
+      ? titleMap?.get(normalizeHistoryTitle(item.title)) || []
+      : [];
   const matchedChannel =
     (item.channelId && channelsById.get(item.channelId)) ||
     (item.username && channelsByUsername.get(item.username)) ||
+    (titleMatches.length === 1 ? titleMatches[0] : null) ||
     (!item.channelId && !item.username && !item.channelName ? singleChannel : null);
 
   const channelId = item.channelId || matchedChannel?.id || null;
@@ -461,10 +466,11 @@ router.get("/api/history", (req, res) => {
       .map((channel) => [channel.username, channel])
   );
   const singleChannel = channels.length === 1 ? channels[0] : null;
+  const titleMap = buildDownloadTitleMap(channels);
 
   res.json(
     (db.data.history || []).map((item) =>
-      normalizeHistoryItem(item, channelsById, channelsByUsername, singleChannel)
+      normalizeHistoryItem(item, channelsById, channelsByUsername, singleChannel, titleMap)
     )
   );
 });
