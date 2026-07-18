@@ -33,6 +33,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CONTRIBUTING.md corrected end-to-end: dev container as primary onboarding path,
   accurate script/port/container references, real test commands, environment
   variable reference, and the actual `./release.sh` release flow.
+- GHCR cleanup workflow now targets the `archivedv` package (was silently
+  deleting nothing under the wrong name) and Dependabot no longer opens
+  automatic PRs while keeping scheduled dependency scanning active.
 
 ## [1.7.3] - 2026-04-08
 

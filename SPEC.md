@@ -168,7 +168,7 @@ V28: `dependabot.yml` `open-pull-requests-limit` ! = `0` ∀ ecosystems; securit
 | T22 | x | F7: fix release.sh bugs + align with best-practice example | V22,V23,V24 |
 | T23 | x | F8: fix devcontainer (base image, node_modules volume, ports, postCreateCommand, extensions) | V25,V26 |
 | T24 | x | F9: fix CONTRIBUTING.md (accuracy, devcontainer section, correct commands) | - |
-| T25 | . | F10: fix cleanup-ghcr.yml (wrong package-name) + dependabot.yml (disable auto-PRs) | V27,V28 |
+| T25 | x | F10: fix cleanup-ghcr.yml (wrong package-name) + dependabot.yml (disable auto-PRs) | V27,V28 |
 
 ## §B BUGS
 

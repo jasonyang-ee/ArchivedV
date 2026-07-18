@@ -18,14 +18,14 @@ concurrency:
 
 jobs:
   cleanup:
-    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Delete untagged GHCR versions
         uses: actions/delete-package-versions@v5
         with:
           owner: ${{ github.repository_owner }}
-          package-name: iclib
+          package-name: archivedv
           package-type: container
           min-versions-to-keep: 0
           delete-only-untagged-versions: 'true'

@@ -1,63 +1,39 @@
 # Dependabot configuration
 # For more information see: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-dependency-updates
+#
+# open-pull-requests-limit: 0 keeps scheduled scanning active (dependency graph
+# stays visible under Insights) without opening public PRs. Security alerts are
+# controlled separately in repo Settings -> Security -> Code security.
 
 version: 2
 updates:
-  # Enable version updates for npm dependencies
+  # Scan npm dependencies (no automatic PRs)
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
       time: "03:00"
-    open-pull-requests-limit: 10
-    reviewers:
-      - "jasonyang-ee"
-    labels:
-      - "dependencies"
-    commit-message:
-      prefix: "chore"
-      prefix-scope: "deps"
-      include: "scope"
-    allow:
-      - dependency-type: "all"
+    open-pull-requests-limit: 0
     ignore:
       # Add any packages to ignore here, e.g.:
       # - dependency-name: "some-package"
       #   versions: ["1.x"]
 
-  # Enable version updates for Docker images
+  # Scan Docker images (no automatic PRs)
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
       time: "04:00"
-    open-pull-requests-limit: 5
-    reviewers:
-      - "jasonyang-ee"
-    labels:
-      - "dependencies"
-      - "docker"
-    commit-message:
-      prefix: "chore"
-      prefix-scope: "docker"
-      include: "scope"
+    open-pull-requests-limit: 0
 
-  # Enable version updates for GitHub Actions workflows
+  # Scan GitHub Actions workflows (no automatic PRs)
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
       time: "05:00"
-    open-pull-requests-limit: 5
-    reviewers:
-      - "jasonyang-ee"
-    labels:
-      - "dependencies"
-      - "ci"
-    commit-message:
-      prefix: "ci"
-      prefix-scope: "actions"
-      include: "scope"
+    open-pull-requests-limit: 0
