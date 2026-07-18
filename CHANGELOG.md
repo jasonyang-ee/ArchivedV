@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added built-in unit coverage for scheduling, retry backoff, auth classification,
   and history migration.
 - Scheduled-stream promotion now preserves its date-prefixed download directory.
+- `release.sh` hardened: strict mode, dry-run flag, tag/dirty-tree/empty-changelog
+  guards, tests run before any file mutation, changelog link definitions updated,
+  and only the release branch and new tag are pushed.
 
 ## [1.7.3] - 2026-04-08
 

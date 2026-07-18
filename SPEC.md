@@ -164,7 +164,7 @@ V28: `dependabot.yml` `open-pull-requests-limit` ! = `0` ∀ ecosystems; securit
 | T19 | x | F4: unit tests parseScheduledTime/computeNextAttempt/classifyYtDlpAuthFailure/migrateHistoryEntries | - |
 | T20 | . | F5: final verify code vs SPEC + CHANGELOG | - |
 | T21 | x | F6: fix dir propagation in addScheduledStream + processScheduledStreams | V21,V9 |
-| T22 | . | F7: fix release.sh bugs + align with best-practice example | V22,V23,V24 |
+| T22 | x | F7: fix release.sh bugs + align with best-practice example | V22,V23,V24 |
 | T23 | . | F8: fix devcontainer (base image, node_modules volume, ports, postCreateCommand, extensions) | V25,V26 |
 | T24 | . | F9: fix CONTRIBUTING.md (accuracy, devcontainer section, correct commands) | - |
 | T25 | . | F10: fix cleanup-ghcr.yml (wrong package-name) + dependabot.yml (disable auto-PRs) | V27,V28 |
