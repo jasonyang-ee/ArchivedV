@@ -73,8 +73,6 @@ ytdlpFlags: string
 | var | default | purpose |
 |-----|---------|---------|
 | `YTDLP_COOKIES_PATH` | `data/youtube_cookies.txt` | Netscape cookies path |
-| `DATA_DIR` | `./data` | DB directory |
-| `DOWNLOAD_DIR` | `./download` | Download root |
 | `DB_PATH` | `data/db.json` | DB file |
 | `MAX_AUTH_FAILURE_ATTEMPTS` | `3` | Attempts before skipping auth video |
 | `MAX_CONCURRENT_DOWNLOADS` | `0` | 0 = unlimited |
@@ -93,6 +91,9 @@ ytdlpFlags: string
 | `DOWNLOAD_WATCHDOG_NO_OUTPUT_MS` | `7200000` | 2hr silence threshold |
 | `DOWNLOAD_WATCHDOG_MIN_RUNTIME_MS` | `600000` | 10min min before kill |
 | `PORT` | `3000` | Express port |
+| `TRUST_PROXY` | `1` | Express trust proxy; `false` when ⊥ behind proxy |
+
+Fixed paths (⊥ env): `DATA_DIR` = `{cwd}/data`, `DOWNLOAD_DIR` = `{cwd}/download` (`server/config.js:14-15`)
 | `AXIOS_TIMEOUT_MS` | `20000` | RSS HTTP timeout |
 | `PUSHOVER_APP_TOKEN` | `""` | Pushover notification token |
 | `PUSHOVER_USER_TOKEN` | `""` | Pushover user token |
@@ -166,7 +167,7 @@ V28: `dependabot.yml` `open-pull-requests-limit` ! = `0` ∀ ecosystems; securit
 | T21 | x | F6: fix dir propagation in addScheduledStream + processScheduledStreams | V21,V9 |
 | T22 | x | F7: fix release.sh bugs + align with best-practice example | V22,V23,V24 |
 | T23 | x | F8: fix devcontainer (base image, node_modules volume, ports, postCreateCommand, extensions) | V25,V26 |
-| T24 | . | F9: fix CONTRIBUTING.md (accuracy, devcontainer section, correct commands) | - |
+| T24 | x | F9: fix CONTRIBUTING.md (accuracy, devcontainer section, correct commands) | - |
 | T25 | . | F10: fix cleanup-ghcr.yml (wrong package-name) + dependabot.yml (disable auto-PRs) | V27,V28 |
 
 ## §B BUGS
@@ -175,3 +176,4 @@ V28: `dependabot.yml` `open-pull-requests-limit` ! = `0` ∀ ecosystems; securit
 |----|------|-------|-----|
 | B1 | 2026-03-07 | cron thread blocked main server thread during feed refresh | replaced cron with `setInterval`; §V.17 |
 | B2 | 2026-07-17 | `addScheduledStream` ⊥ accept/store `dir`; `processScheduledStreams` ⊥ pass `stream.dir` on promote → scheduled folder ⊥ date prefix | §V.21 |
+| B3 | 2026-07-18 | §I env table listed `DATA_DIR`/`DOWNLOAD_DIR` as env vars; `server/config.js:14-15` hardcodes both to cwd → env ignored | §I corrected: fixed-paths note; ⊥ env rows |

@@ -30,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Devcontainer now opens ready to work: devcontainer base image, node_modules in
   a named volume, Vite port 5173 forwarded, `npm install` on create, and a
   JavaScript-focused extension set.
+- CONTRIBUTING.md corrected end-to-end: dev container as primary onboarding path,
+  accurate script/port/container references, real test commands, environment
+  variable reference, and the actual `./release.sh` release flow.
 
 ## [1.7.3] - 2026-04-08
 

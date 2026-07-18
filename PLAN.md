@@ -199,7 +199,8 @@ findings (research done inline):
 - `VERSIONING.md` referenced but ⊥ exists → replace with `CHANGELOG.md` + inline release info
 - `start.bat` referenced but ⊥ exists → remove; `./start.sh` only
 - `docker-compose exec app ...` → container name is `archivedv`; ⊥ `app`
-- `npm run test` / `npm run format` → ⊥ scripts in package.json → remove or note as planned
+- `npm run format` → ⊥ script in package.json → remove or note as planned
+- CORRECTION (F9 exec): `npm test` EXISTS since F4 → keep/document it; only `docker-compose exec app npm run test` form was wrong (container name + no dev tests in prod image)
 - husky setup recommended but ⊥ installed → remove
 - external docker-compose port = 7000 (not 3000); CONTRIBUTING says 3000 → fix
 - devcontainer section absent → add as primary onboarding path (zero-install)
@@ -209,7 +210,7 @@ steps:
 2. Remove `start.bat` reference; keep `./start.sh` for Linux/macOS local path
 3. Fix `docker-compose` ports: external `7000` → `http://localhost:7000`; internal `3000` for API
 4. Fix `docker-compose exec` container name: `app` → `archivedv`
-5. Remove `npm run test` / `docker-compose exec app npm run test` — no test script yet; replace with `npm run build` build verification
+5. Document `npm test` (exists since F4) + `npm run build` verification; drop the `docker-compose exec app npm run test` form
 6. Remove `npm run format` — no format script; note Prettier used via editor integration
 7. Remove husky setup block
 8. Fix release script path: `./scripts/create-release.sh` → `./release.sh`; remove `VERSIONING.md` link; inline the release types table

@@ -33,15 +33,29 @@ Before you submit the pull request for review, please ensure that:
 
 ## Development Environment
 
-ArchivedV is a web application for downloading and archiving videos using yt-dlp. To set up a local development environment, follow these steps:
+ArchivedV is a web application for downloading and archiving videos using yt-dlp.
 
-### Prerequisites
+### Dev Container (recommended)
+
+The fastest way to get a working environment — no local Node.js, yt-dlp, or ffmpeg install needed:
+
+1. Install [Docker](https://www.docker.com/products/docker-desktop), [VS Code](https://code.visualstudio.com/), and the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers).
+2. Open the repository in VS Code and choose **Reopen in Container** when prompted (or run the `Dev Containers: Reopen in Container` command).
+3. Dependencies install automatically on first open. Start the dev servers:
+   ```bash
+   npm run dev
+   ```
+4. The frontend is at `http://localhost:5173`, the backend API at `http://localhost:3000`.
+
+### Local Setup
+
+#### Prerequisites
 
 - [Node.js](https://nodejs.org/en/download/) >= 24
 - [Docker](https://www.docker.com/products/docker-desktop) for testing the complete stack
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) installed on your system for local testing
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) and [ffmpeg](https://ffmpeg.org/) installed on your system for local testing
 
-### Setup
+#### Setup
 
 1. Clone the repository:
    ```bash
@@ -51,16 +65,11 @@ ArchivedV is a web application for downloading and archiving videos using yt-dlp
    cd ArchivedV
    ```
 
-### Running Locally
+#### Running Locally
 
-- Start the server stack:
-	> Linux
+- Start the server stack (Linux/macOS):
 	```bash
 	./start.sh
-	```
-	> Windows
-	```bash
-	start.bat
 	```
 
 - The frontend will start on `http://localhost:5173`
@@ -72,6 +81,7 @@ ArchivedV is a web application for downloading and archiving videos using yt-dlp
 	```bash
 	docker-compose up
 	```
+- The web interface is published on `http://localhost:7000` (host port 7000 maps to container port 3000).
 
 ### Building
 
@@ -92,9 +102,21 @@ docker buildx build --platform linux/amd64,linux/arm64 -t your-registry/archived
 
 ### Testing
 
-Test the application locally:
+Run the unit test suite:
 
-1. Ensure the application is running:
+```bash
+npm test
+```
+
+Verify the frontend still builds:
+
+```bash
+npm run build
+```
+
+Test the running application:
+
+1. Start the server:
    ```bash
    npm start
    ```
@@ -109,47 +131,41 @@ Test the application locally:
    http://localhost:3000
    ```
 
-4. Test with Docker:
-   ```bash
-   docker-compose up
-   docker-compose exec app npm run test
-   ```
+### Environment Variables
+
+All variables are optional and default sensibly (see `server/config.js` for the full list, and the commented examples in `docker-compose.yml`):
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `PORT` | `3000` | Express server port |
+| `TRUST_PROXY` | `1` | Express `trust proxy` setting; set `false` when not behind a proxy |
+| `YTDLP_COOKIES_PATH` | `data/youtube_cookies.txt` | Netscape-format cookies file for yt-dlp auth |
+| `PUSHOVER_APP_TOKEN` | empty | Pushover notification app token |
+| `PUSHOVER_USER_TOKEN` | empty | Pushover notification user token |
 
 ### Code Style
 
-We use [Prettier](https://prettier.io/) for code formatting. Before committing, run:
-
-```bash
-npm run format
-```
-
-Or enable auto-formatting in your editor.
-
-### Commit Hooks
-
-We recommend using [husky](https://typicode.github.io/husky/) to automatically lint and format your code before committing. After cloning, you can set it up with:
-
-```bash
-npm install husky --save-dev
-npx husky install
-```
+We use [Prettier](https://prettier.io/) for code formatting via editor integration — the dev container ships with the Prettier extension preinstalled. Enable format-on-save in your editor.
 
 ## Releasing a New Version
 
-Releases are automated using our release script. See [VERSIONING.md](VERSIONING.md) for detailed instructions.
-
-For maintainers, the release process is:
+For maintainers, releases are automated with the release script:
 
 ```bash
-./scripts/create-release.sh --minor  # or --major, --patch
+./release.sh            # auto-detect release type from commits
+./release.sh --minor    # or --major, --patch
+./release.sh --dry-run  # preview the release plan
 ```
 
 This will:
+- Run the test suite
 - Bump the version in `package.json`
 - Update `CHANGELOG.md`
 - Create a git tag
 - Create a GitHub draft release
 - Trigger automated Docker builds and image publishing
+
+Release types follow [Semantic Versioning](https://semver.org/): **major** for breaking changes, **minor** for new features (`feat:` commits), **patch** for bug fixes (`fix:` commits). Changes are tracked in `CHANGELOG.md` under `[Unreleased]` until released.
 
 ## Questions or Need Help?
 
