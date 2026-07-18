@@ -1,37 +1,43 @@
 # HANDOFF 2026-07-18
 
-branch main | last commit c404645 ci: fix GHCR cleanup target and silence dependabot PRs | tests green
-baseline green | oracle `npm.cmd test` + `npm.cmd run build`
+branch main | last commit <F5 commit — see git log> chore: final verification pass | tests green
+baseline green | oracle `npm.cmd test` (4 pass) + `npm.cmd run build` + server startup smoke
 uncommitted: none
 
 ## done this session
 F7: release.sh hardened → 8148bfa
 F8: devcontainer rebuilt → 392c261
 F9: CONTRIBUTING.md accurate; SPEC B3 logged → 4802e70
-F10: cleanup-ghcr package-name archivedv + dependabot PR limit 0 → c404645
+F10: cleanup-ghcr package-name archivedv + dependabot limit 0 → c404645
+F5: final verification — ∀ §V grep-verified, tests+build+startup green, T20 x
 
 ## in progress (exact stop point)
-F10 x: both YAMLs valid (js-yaml); package-name matches release.yml GHCR image | NEXT STEP: F5 final verification per PLAN.md steps 1-9 (gate met: F4,F6,F7,F8,F9,F10 all x)
+∅ — plan complete. NEXT STEP: user invokes /garnish to close cycle (purge PLAN.md + HANDOFF.md)
 mid-edit files: -
 
 ## next
-F5 final gate | preconditions: met | after F5 → /garnish
+∅ | ∀ PLAN.md phases x (T16-T25) | cycle done → /garnish
 
 ## deviations & decisions
-F10: dependabot `ignore:` kept as comment-only null (parity with original)
-F9: `npm test` documented (plan step stale); §I DATA_DIR/DOWNLOAD_DIR drift → B3
-F8: `usernamehw.errorlens`; Dockerfile pre-chowns /app (PLAN.md updated: y)
+F5: V1-V20 unchanged this cycle → spot-checked touched invariants + full test/build/startup oracle; ⊥ line-by-line re-read of untouched modules
+see prior batons in git history for F7-F10 deviations
 user decided: -
 
 ## watchouts
-- repo owner ! manually disable "Dependabot security updates" in GitHub Settings → ⊥ YAML-controllable
-- PowerShell `npm` shim blocked → `npm.cmd`; PS here-string commit messages flaky → use Bash tool
-- release.sh dirty-tree guard fires on any uncommitted file → commit before even `--dry-run`
+- repo owner ! manually disable "Dependabot security updates" in GitHub Settings (⊥ YAML)
+- CHANGELOG [Unreleased] Added/Changed hold bare `- ` placeholders → release.sh guard strips them; harmless
+- PowerShell `npm` shim blocked → `npm.cmd`; PS here-string commit msgs flaky → Bash tool
 - ⊥ push or tag without explicit user ask
 
 ## final verification
 item|status|evidence|decision
-T22|HOLD|scratch-clone runs: dry-run correct, guards die; `bash -n` clean|SPEC
-T23|HOLD|`docker build` exit 0; volume write-ok as node; valid JSON|SPEC
-T24|HOLD|grep: ⊥ stale refs; scripts+ports match repo|SPEC
-T25|HOLD|js-yaml valid ×2; package-name=archivedv; limit 0 ∀ ecosystems|SPEC
+V-ratelimit (F2)|HOLD|routes.js:33,39 use AUTH/STATIC_RATELIMIT_MAX from config|-
+V helper (F2)|HOLD|buildChannelUrl defined utils.js:23 only; 3 importers|-
+V week (F2)|HOLD|downloader.js:143,153 + parseScheduledTime test|-
+V2 dedup (F2)|HOLD|scheduler.js:464 videoId check|-
+V6|HOLD|SPEC wording in-memory; authSkipCache in-process|-
+V21|HOLD|downloader.js:182 dir: info.dir; :581 call passes dir; scheduler.js:111 dir: stream.dir|-
+V22-V24|HOLD|release.sh:269 npm test gate, :228 empty guard, :328-329 push by name|-
+V25-V26|HOLD|devcontainer.json:20 ports 3000+5173, :22 named volume, :26 postCreate npm install|-
+V27-V28|HOLD|cleanup-ghcr.yml:28 archivedv; dependabot limit 0 ×3 ecosystems|-
+T20|HOLD|npm test 4 pass; vite build ok; server starts port 3000 no errors|SPEC

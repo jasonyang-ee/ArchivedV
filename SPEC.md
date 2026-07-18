@@ -163,7 +163,7 @@ V28: `dependabot.yml` `open-pull-requests-limit` ! = `0` ∀ ecosystems; securit
 | T17 | x | F2: BLOCK-1 rate limit + HARDEN 1,3,5 | V15,V20 |
 | T18 | x | F3: HARDEN-4 history enrichment + §V.6 amend | V6 |
 | T19 | x | F4: unit tests parseScheduledTime/computeNextAttempt/classifyYtDlpAuthFailure/migrateHistoryEntries | - |
-| T20 | . | F5: final verify code vs SPEC + CHANGELOG | - |
+| T20 | x | F5: final verify code vs SPEC + CHANGELOG | - |
 | T21 | x | F6: fix dir propagation in addScheduledStream + processScheduledStreams | V21,V9 |
 | T22 | x | F7: fix release.sh bugs + align with best-practice example | V22,V23,V24 |
 | T23 | x | F8: fix devcontainer (base image, node_modules volume, ports, postCreateCommand, extensions) | V25,V26 |
