@@ -8,19 +8,22 @@
 	"customizations": {
 		"vscode": {
 			"extensions": [
-				"ms-vscode.vscode-typescript-next",
+				"esbenp.prettier-vscode",
+				"dbaeumer.vscode-eslint",
+				"humao.rest-client",
+				"eamodio.gitlens",
 				"bradlc.vscode-tailwindcss",
-				"ms-vscode.vscode-json",
-				"esbenp.prettier-vscode"
+				"usernamehw.errorlens"
 			]
 		}
 	},
-	"forwardPorts": [3000],
+	"forwardPorts": [3000, 5173],
 	"mounts": [
-		"source=${localWorkspaceFolder}/data,target=/app/data,type=bind,consistency=cached",
-		"source=${localWorkspaceFolder}/download,target=/app/download,type=bind,consistency=cached"
+		"source=archivedv-node_modules,target=/app/node_modules,type=volume"
 	],
 	"workspaceMount": "source=${localWorkspaceFolder},target=/app,type=bind,consistency=cached",
 	"workspaceFolder": "/app",
+	"postCreateCommand": "npm install && mkdir -p data download",
+	"remoteUser": "node",
 	"shutdownAction": "stopContainer"
 }

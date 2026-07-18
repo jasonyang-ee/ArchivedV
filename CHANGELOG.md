@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `release.sh` hardened: strict mode, dry-run flag, tag/dirty-tree/empty-changelog
   guards, tests run before any file mutation, changelog link definitions updated,
   and only the release branch and new tag are pushed.
+- Devcontainer now opens ready to work: devcontainer base image, node_modules in
+  a named volume, Vite port 5173 forwarded, `npm install` on create, and a
+  JavaScript-focused extension set.
 
 ## [1.7.3] - 2026-04-08
 

@@ -179,10 +179,11 @@ findings (research done inline):
 - `mounts` lists `data` + `download` separately → redundant (workspace mount already covers them)
 - port 5173 (Vite) ⊥ forwarded → contributor browser hit fails on hot-reload URL
 - `postCreateCommand` absent → contributor must manually `npm install` & `mkdir data download`
-- VS Code extensions: missing ESLint (`dbaeumer.vscode-eslint`), REST Client (`humao.rest-client`), GitLens (`eamodio.gitlens`), Error Lens (`usernamehm.errorlens`); TS extension redundant (JS-only project)
+- VS Code extensions: missing ESLint (`dbaeumer.vscode-eslint`), REST Client (`humao.rest-client`), GitLens (`eamodio.gitlens`), Error Lens (`usernamehw.errorlens` — plan originally misspelled publisher `usernamehm`); TS extension redundant (JS-only project)
+- CORRECTION (F8 exec): named node_modules volume mounts root-owned unless image pre-creates dir → Dockerfile adds `mkdir -p /app/node_modules && chown -R node:node /app` so first mount inherits `node` ownership; `remoteUser: node` can then `npm install`
 steps:
 1. `.devcontainer/Dockerfile`: replace `FROM node:24-trixie AS dev` → `FROM mcr.microsoft.com/devcontainers/javascript-node:24-bookworm`; remove `npm ci` + `COPY` steps (workspace mount + postCreateCommand handles deps); keep yt-dlp + ffmpeg + system dep install block; keep verify step; keep `WORKDIR /app`; remove final `COPY . .` + `CMD`
-2. `.devcontainer/devcontainer.json`: remove redundant `data` + `download` entries from `mounts`; add named volume mount for node_modules: `"source=archivedv-node_modules,target=/app/node_modules,type=volume"`; add 5173 to `forwardPorts`; add `postCreateCommand`: `"npm install && mkdir -p data download"`; replace extensions list with: `esbenp.prettier-vscode`, `dbaeumer.vscode-eslint`, `humao.rest-client`, `eamodio.gitlens`, `bradlc.vscode-tailwindcss`, `usernamehm.errorlens`; add `"remoteUser": "node"`
+2. `.devcontainer/devcontainer.json`: remove redundant `data` + `download` entries from `mounts`; add named volume mount for node_modules: `"source=archivedv-node_modules,target=/app/node_modules,type=volume"`; add 5173 to `forwardPorts`; add `postCreateCommand`: `"npm install && mkdir -p data download"`; replace extensions list with: `esbenp.prettier-vscode`, `dbaeumer.vscode-eslint`, `humao.rest-client`, `eamodio.gitlens`, `bradlc.vscode-tailwindcss`, `usernamehw.errorlens`; add `"remoteUser": "node"`
 verify: `docker build -f .devcontainer/Dockerfile .` succeeds; devcontainer.json valid JSON; ports 3000+5173 in forwardPorts
 exit: ∀ V25-V26 hold; clean build, no dangling temp files
 next: F9
