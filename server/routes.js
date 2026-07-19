@@ -5,10 +5,10 @@ import axios from "axios";
 import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
 import { Parser, processors } from "xml2js";
-import db, { buildDownloadTitleMap, normalizeHistoryTitle } from "./database.js";
+import db, { buildDownloadTitleMap, resolveHistoryChannel } from "./database.js";
 import { autoMerge } from "./merger.js";
 import { clearAuthSkipCache } from "./auth.js";
-import { buildChannelUrl, isValidYouTubeUrl, sanitize } from "./utils.js";
+import { isValidYouTubeUrl, sanitize } from "./utils.js";
 import {
   status,
   activeDownloads,
@@ -52,20 +52,12 @@ const router = express.Router();
 router.use(express.json({ limit: "6mb" }));
 
 function normalizeHistoryItem(item, channelsById, channelsByUsername, singleChannel, titleMap) {
-  const titleMatches =
-    !item.channelId && !item.username && !item.channelName
-      ? titleMap?.get(normalizeHistoryTitle(item.title)) || []
-      : [];
-  const matchedChannel =
-    (item.channelId && channelsById.get(item.channelId)) ||
-    (item.username && channelsByUsername.get(item.username)) ||
-    (titleMatches.length === 1 ? titleMatches[0] : null) ||
-    (!item.channelId && !item.username && !item.channelName ? singleChannel : null);
-
-  const channelId = item.channelId || matchedChannel?.id || null;
-  const username = item.username || matchedChannel?.username || null;
-  const channelName = item.channelName || matchedChannel?.channelName || username || null;
-  const channelUrl = item.channelUrl || buildChannelUrl(channelId, username);
+  const { channelId, username, channelName, channelUrl } = resolveHistoryChannel(item, {
+    channelsById,
+    channelsByUsername,
+    singleChannel,
+    titleMap,
+  });
 
   return {
     ...item,
@@ -466,10 +458,14 @@ router.get("/api/history", (req, res) => {
       .map((channel) => [channel.username, channel])
   );
   const singleChannel = channels.length === 1 ? channels[0] : null;
-  const titleMap = buildDownloadTitleMap(channels);
+  const history = db.data.history || [];
+  const needsFolderLookup = history.some(
+    (item) => !item.channelId && !item.username && !item.channelName
+  );
+  const titleMap = needsFolderLookup ? buildDownloadTitleMap(channels) : null;
 
   res.json(
-    (db.data.history || []).map((item) =>
+    history.map((item) =>
       normalizeHistoryItem(item, channelsById, channelsByUsername, singleChannel, titleMap)
     )
   );

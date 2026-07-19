@@ -8,7 +8,11 @@ import {
   computeNextAttempt,
   parseScheduledTime,
 } from "../downloader.js";
-import { migrateHistoryEntries } from "../database.js";
+import {
+  migrateHistoryEntries,
+  normalizeHistoryTitle,
+  resolveHistoryChannel,
+} from "../database.js";
 
 test("parseScheduledTime handles supported units and invalid input", () => {
   const cases = [
@@ -94,4 +98,70 @@ test("migrateHistoryEntries enriches metadata from direct and folder matches", (
   } finally {
     fs.rmSync(path.join(DOWNLOAD_DIR, username), { recursive: true, force: true });
   }
+});
+
+test("resolveHistoryChannel resolves channel metadata by precedence", () => {
+  const primary = { id: "chan-1", username: "primary", channelName: "Primary Channel" };
+  const other = { id: "chan-2", username: "other", channelName: "Other Channel" };
+  const channelsById = new Map([primary, other].map((c) => [c.id, c]));
+  const channelsByUsername = new Map([primary, other].map((c) => [c.username, c]));
+  const titleMap = new Map([[normalizeHistoryTitle("Folder Match"), [primary]]]);
+  const multiCtx = { channelsById, channelsByUsername, singleChannel: null, titleMap };
+
+  // direct channelId match wins
+  assert.deepEqual(resolveHistoryChannel({ title: "A", channelId: "chan-1" }, multiCtx), {
+    channelId: "chan-1",
+    username: "primary",
+    channelName: "Primary Channel",
+    channelUrl: "https://www.youtube.com/@primary",
+  });
+
+  // username match
+  assert.deepEqual(resolveHistoryChannel({ title: "B", username: "other" }, multiCtx), {
+    channelId: "chan-2",
+    username: "other",
+    channelName: "Other Channel",
+    channelUrl: "https://www.youtube.com/@other",
+  });
+
+  // bare item resolved by single folder-title match
+  assert.deepEqual(resolveHistoryChannel({ title: "Folder Match" }, multiCtx), {
+    channelId: "chan-1",
+    username: "primary",
+    channelName: "Primary Channel",
+    channelUrl: "https://www.youtube.com/@primary",
+  });
+
+  // channelName-only item still folder-enriched (HARDEN-2: API now matches migration)
+  assert.deepEqual(
+    resolveHistoryChannel({ title: "Folder Match", channelName: "Legacy Name" }, multiCtx),
+    {
+      channelId: "chan-1",
+      username: "primary",
+      channelName: "Legacy Name",
+      channelUrl: "https://www.youtube.com/@primary",
+    }
+  );
+
+  // no match falls back to the sole channel
+  const singleCtx = {
+    channelsById: new Map([[primary.id, primary]]),
+    channelsByUsername: new Map([[primary.username, primary]]),
+    singleChannel: primary,
+    titleMap: null,
+  };
+  assert.deepEqual(resolveHistoryChannel({ title: "Unknown" }, singleCtx), {
+    channelId: "chan-1",
+    username: "primary",
+    channelName: "Primary Channel",
+    channelUrl: "https://www.youtube.com/@primary",
+  });
+
+  // no match with multiple channels stays unresolved
+  assert.deepEqual(resolveHistoryChannel({ title: "Unknown" }, multiCtx), {
+    channelId: null,
+    username: null,
+    channelName: null,
+    channelUrl: null,
+  });
 });

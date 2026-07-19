@@ -63,6 +63,25 @@ export function buildDownloadTitleMap(channels) {
   return titleMap;
 }
 
+export function resolveHistoryChannel(
+  item,
+  { channelsById, channelsByUsername, singleChannel, titleMap }
+) {
+  const titleMatches = titleMap?.get(normalizeHistoryTitle(item.title)) || [];
+  const matchedChannel =
+    (item.channelId && channelsById.get(item.channelId)) ||
+    (item.username && channelsByUsername.get(item.username)) ||
+    (titleMatches.length === 1 ? titleMatches[0] : null) ||
+    (!item.channelId && !item.username && !item.channelName ? singleChannel : null);
+
+  const channelId = item.channelId || matchedChannel?.id || null;
+  const username = item.username || matchedChannel?.username || null;
+  const channelName = item.channelName || matchedChannel?.channelName || username || null;
+  const channelUrl = item.channelUrl || buildChannelUrl(channelId, username);
+
+  return { channelId, username, channelName, channelUrl };
+}
+
 export function migrateHistoryEntries(data) {
   const history = Array.isArray(data.history) ? data.history : [];
   const channels = Array.isArray(data.channels) ? data.channels : [];
@@ -88,17 +107,12 @@ export function migrateHistoryEntries(data) {
   let unresolvedCount = 0;
 
   data.history = history.map((item) => {
-    const titleMatches = titleMap?.get(normalizeHistoryTitle(item.title)) || [];
-    const matchedChannel =
-      (item.channelId && channelsById.get(item.channelId)) ||
-      (item.username && channelsByUsername.get(item.username)) ||
-      (titleMatches.length === 1 ? titleMatches[0] : null) ||
-      (!item.channelId && !item.username && !item.channelName ? singleChannel : null);
-
-    const channelId = item.channelId || matchedChannel?.id || null;
-    const username = item.username || matchedChannel?.username || null;
-    const channelName = item.channelName || matchedChannel?.channelName || username || null;
-    const channelUrl = item.channelUrl || buildChannelUrl(channelId, username);
+    const { channelId, username, channelName, channelUrl } = resolveHistoryChannel(item, {
+      channelsById,
+      channelsByUsername,
+      singleChannel,
+      titleMap,
+    });
 
     const nextItem = { ...item };
     let itemChanged = false;
