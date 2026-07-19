@@ -1,33 +1,33 @@
 # HANDOFF 2026-07-19
 
-branch main | last commit ff81f5a docs: confirm history-enrichment refactor contract (T26) | tests green
-baseline green | oracle `npm test` (4 pass, Node v25.9.0) + `node --check` server/*.js + import smoke routes.js/scheduler.js
+branch main | last commit cd536a6 refactor: single-source history channel enrichment (T27, §V29) | tests green (5 pass)
+baseline green | oracle `npm test` (5 pass, Node v25.9.0) + `node --check` server/*.js + import smoke routes.js/scheduler.js
 uncommitted: HANDOFF.md (this baton) — commit as `docs: handoff`
 
 ## done this session
-F1 (T26): re-verified `resolveHistoryChannel` contract vs live code (routes.js:8,54-77,459-476; database.js:66-136; utils.js:23-27; core.test.js) + landed cook/review-plan planning baseline (SPEC §V29,§I env rows,§T26-29; PLAN F1-F4) → ff81f5a. T26→x
+F1 (T26): re-verified `resolveHistoryChannel` contract vs live code + landed cook/review-plan planning baseline (SPEC §V29,§I env rows,§T26-29; PLAN F1-F4) → ff81f5a
+F2 (T27): extracted `resolveHistoryChannel` (database.js) as sole precedence logic; both callers use it; `/api/history` titleMap gated by `needsFolderLookup`; dropped orphan routes.js imports (`normalizeHistoryTitle`,`buildChannelUrl`); +unit test (6 cases). npm test 5 pass. EOL verified byte-identical on untouched lines → cd536a6. T27→x
 
 ## in progress (exact stop point)
-∅ — F1 closed, F2 ⊥ started. NEXT STEP: `/workonplan` → execute F2 (T27) per PLAN.md F2 steps 1-7. Add `export function resolveHistoryChannel(item,{channelsById,channelsByUsername,singleChannel,titleMap})` to `server/database.js` (body = migrate ungated precedence, database.js:91-101); both callers call it; gate `/api/history` titleMap by `needsFolderLookup`; add unit test in core.test.js
+∅ — F2 committed. NEXT STEP: `/workonplan` → execute F3 (T28) per PLAN.md F3. Re-inspect `git ls-files --eol server/`; DECISION default = option A: write `.gitattributes` at repo root = `* text=auto eol=lf` ONLY (⊥ `git add --renormalize` mass commit — 5 mixed files = churn); confirm `git status` shows only new `.gitattributes` (+ HANDOFF/SPEC); ⊥ touch server logic. Record decision+reason in HANDOFF
 mid-edit files: none
 
 ## next
-F2 (T27) extract helper + gate + tests | preconditions: none (F1 findings in PLAN.md F2 inputs). then F3 (T28) `.gitattributes` decision; F4 (T29) final verify + CHANGELOG
-F1 (T26) = REMOVAL CANDIDATE on next `/cook` (all unknowns resolved)
+F3 (T28) `.gitattributes` decision (option A) | preconditions: none. then F4 (T29) final verify + confirm CHANGELOG
+F1 (T26) = REMOVAL CANDIDATE on next `/cook`
 
 ## deviations & decisions
-plan: F1 = formality (review-plan pre-confirmed) → workonplan re-verified vs live code + flipped T26→x + committed PLAN/SPEC baseline (PLAN.md updated: y, prior cycle)
-note: enrichment unification aligns routes → migrate ungated precedence for ALL under-populated item shapes (⊥ only channelName-only) e.g. channelId∉channels + folder title-match + coexisting bare item → now folder-matched in API too, = §V29 single-source intent; fully-populated items stay byte-identical
-CHANGELOG: plan puts entry in F4; will add in F2 (phase that ships code) per workonplan per-phase contract, F4 verifies present (minor, end-state identical)
+plan: F1 formality → re-verified + committed planning baseline in ff81f5a (PLAN.md updated: y prior cycle)
+CHANGELOG: added enrichment-unification entry under §Changed in F2 commit (plan assigned it to F4) — per workonplan per-phase contract (code ships in F2); F4 will VERIFY present, ⊥ duplicate. end-state identical
+note: enrichment unification aligns API → migrate ungated precedence for ALL under-populated item shapes (⊥ only channelName-only), = §V29 single-source intent; fully-populated items byte-identical (F1 analysis)
 user decided: -
 
 ## watchouts
-- `/api/history` byte-identical for fully-populated items (pure refactor + gate); under-populated items now enriched to match migrate (see deviation note) — intended §V29
-- F2 gate: build titleMap iff `needsFolderLookup` = ∃ item ⊥ channelId & ⊥ username & ⊥ channelName; ⊥ per-request scan
-- F2 orphan imports: drop `normalizeHistoryTitle` (`./database.js`) & `buildChannelUrl` (`./utils.js`) from routes.js — each used ONLY in `normalizeHistoryItem` (routes.js:57,68 confirmed via grep); ⊥ `node --check` catch → grep routes.js post-refactor. KEEP `buildDownloadTitleMap` (routes.js:469) + `sanitize` (pre-existing unused, out of scope)
-- EOL: `database.js`+`routes.js` = `i/mixed w/mixed` → F2 ! targeted Edits (⊥ full rewrite); review `git diff` for spurious CRLF↔LF flips
-- regression guard: core.test.js migrate test (updatedCount===3) ! stay green post-F2 = proves migrate preserved thru helper extraction
-- PowerShell `npm` shim may be blocked → `npm.cmd` | Bash tool; Node v25 confirms `node --test` glob works
+- F3: repo is `text=auto eol=lf` target but working tree is mixed (server/ = 4 pure-CRLF + 5 mixed + tests LF). option A adds attributes only → per-file LF normalize on NEXT touch, ⊥ giant churn now. option B (`git add --renormalize .`) = large diff → only w/ explicit user ok
+- F3 ! ⊥ intersect F2 file set (server logic) — attributes file only
+- F4: confirm `resolveHistoryChannel` single def (database.js) + 2 callers; `/api/history` titleMap gated; CHANGELOG §Changed entry present; rerun `npm test`(5)+`node --check`+import smoke; §V29 HOLD
+- `sanitize` in routes.js:11 still imported-but-unused (pre-existing, out of scope; flag for future cleanup)
+- PowerShell `npm` shim may be blocked → `npm.cmd` | Bash tool
 - ⊥ push | tag without explicit user ask
 
 ## final verification
