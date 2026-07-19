@@ -1,37 +1,41 @@
 # HANDOFF 2026-07-19
 
-branch main | last commit 225265a chore: normalize line endings to LF via .gitattributes (T28) | tests green (5 pass)
+branch main | last commit (this F4 commit) | tests green (5 pass)
 baseline green | oracle `npm test` (5 pass, Node v25.9.0) + `node --check` server/*.js + import smoke routes.js/scheduler.js
-uncommitted: HANDOFF.md (this baton) — commit as `docs: handoff`
+uncommitted: none (HANDOFF.md folded into F4 commit)
 
 ## done this session
 F1 (T26): re-verified `resolveHistoryChannel` contract + landed planning baseline → ff81f5a
 F2 (T27): extracted `resolveHistoryChannel` (database.js) single-source; both callers use it; `/api/history` titleMap gated by `needsFolderLookup`; orphan imports dropped; +unit test (6 cases); npm test 5 pass → cd536a6
-F3 (T28): added root `.gitattributes` `* text=auto eol=lf` (option A). VERIFIED: core.autocrlf=false → `git status` clean beyond new file (⊥ mass renormalize churn); files normalize per-file on next `git add` → 225265a
+F3 (T28): added root `.gitattributes` `* text=auto eol=lf` (option A, verified no churn) → 225265a
+F4 (T29): final verify — §V29 + §I env rows HOLD; oracle green; CHANGELOG confirmed → this commit
 
 ## in progress (exact stop point)
-∅ — F3 committed. NEXT STEP: `/workonplan` → execute F4 (T29) per PLAN.md F4 steps 1-8: re-read §V29+§I env rows → classify HOLD/VIOLATE; grep `resolveHistoryChannel` = 1 def (database.js) + 2 callers; confirm `/api/history` titleMap gated; confirm CHANGELOG §Changed has enrichment + `.gitattributes` entries (ALREADY added F2/F3 → verify, ⊥ duplicate); rerun `npm test`(5)+`node --check`+import smoke; fill final-verification table; commit
+∅ — ALL PLAN phases (F1-F4 / T26-T29) done, §T all `x`. NEXT STEP: run `/garnish` to purge PLAN.md + HANDOFF.md (SPEC.md + history preserved). Cycle complete; ⊥ code work remaining
 mid-edit files: none
 
 ## next
-F4 (T29) final verify + fill verification table + confirm CHANGELOG | preconditions: F2,F3 done ✓
-after F4 → cycle complete → `/garnish` (purge PLAN.md + HANDOFF.md)
-F1 (T26) = REMOVAL CANDIDATE on next `/cook`
+`/garnish` (close cycle) | preconditions: all §T x ✓, tests green ✓, no unrelated dirty ✓
+future cleanup (⊥ this cycle): remove pre-existing unused `sanitize` import in routes.js:11 — defer to a cycle that already touches routes.js (editing it now → `.gitattributes` LF-renormalizes whole mixed file = mass churn)
 
 ## deviations & decisions
-CHANGELOG: enrichment entry added in F2 commit, `.gitattributes` entry in F3 commit (plan assigned both to F4) — per workonplan per-phase contract; F4 VERIFIES present, ⊥ duplicate
-F3 = option A (attributes only) confirmed clean by empirical `git status` test (core.autocrlf=false → ⊥ retroactive dirty)
+CHANGELOG: enrichment entry landed in F2 commit, `.gitattributes` entry in F3 commit (plan assigned both to F4); F4 verified both present under §Changed (CHANGELOG.md:16-17), ⊥ duplicated. end-state = plan intent
+F3 = option A confirmed clean by empirical `git status` (core.autocrlf=false → ⊥ retroactive dirty)
 note: enrichment unification aligns API → migrate ungated precedence for ALL under-populated shapes (⊥ only channelName-only) = §V29 single-source intent; fully-populated items byte-identical
 user decided: -
 
 ## watchouts
-- F4 is verify-only: ⊥ edit server logic; if drift found, classify code|SPEC bug via `/spec` before fixing
-- `sanitize` in routes.js:11 still imported-but-unused (pre-existing, out of scope; flag future cleanup)
-- `.gitattributes` now active: any FUTURE `git add` of a mixed/CRLF file → LF-renormalizes that file (expected, per-file). F4 touches ⊥ server files ∴ ⊥ triggered this cycle
+- `sanitize` in routes.js:11 imported-but-unused (pre-existing, out of scope; see `next`)
+- `.gitattributes` active: FUTURE `git add` of any mixed/CRLF file → LF-renormalizes that whole file (expected, per-file)
 - PowerShell `npm` shim may be blocked → `npm.cmd` | Bash tool
-- ⊥ push | tag without explicit user ask
+- ⊥ push | tag without explicit user ask (10+ unpushed commits on main)
 
 ## final verification
 item|status|evidence|decision
--|-|-|-
-(F4 fills this)
+§V29 sole precedence logic|HOLD|`resolveHistoryChannel` 1 def database.js:66; 2 callers routes.js:55 + database.js:110; ⊥ 3rd caller (grep server/)|code
+§V29 titleMap gated by needsFolderLookup|HOLD|routes.js:462-465 (`? buildDownloadTitleMap : null`); database.js:81-84; ⊥ unconditional scan|code
+§V29 channelName-only enrichment identical API↔migrate|HOLD|shared helper single-source; core.test.js case 4 (npm test 5 pass)|code
+§I AUTH_RATELIMIT_MAX=60|HOLD|config.js:54 (`|| 60`); routes.js authFsLimiter max|code
+§I STATIC_RATELIMIT_MAX=600|HOLD|config.js:53 (`|| 600`); routes.js staticFsLimiter max|code
+T26,T27,T28,T29|x|ff81f5a / cd536a6 / 225265a / this commit|-
+oracle full suite|HOLD|`npm test` 5 pass (0 fail); +`node --check` 4 files; +import smoke routes/scheduler|-

@@ -175,7 +175,7 @@ V29: history channel enrichment single-source: `resolveHistoryChannel(item, ctx)
 | T26 | x | F1 research: confirm history-enrichment call sites + resolveHistoryChannel signature/home/return shape | V29 |
 | T27 | x | F2: extract shared resolveHistoryChannel; both callers use it; gate /api/history titleMap by needsFolderLookup; add unit tests | V29 |
 | T28 | x | F3: line-ending normalization — add .gitattributes (`* text=auto eol=lf`), optional | - |
-| T29 | . | F4: final verify code vs SPEC + CHANGELOG | V29 |
+| T29 | x | F4: final verify code vs SPEC + CHANGELOG | V29 |
 
 ## §B BUGS
 
