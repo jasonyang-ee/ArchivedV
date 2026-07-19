@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.4] - 2026-07-19
+
 ### Added
 
 - 
@@ -441,3 +443,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Vite for frontend build
 - Express.js server
 - JSON database for data storage
+
+[Unreleased]: https://github.com/jasonyang-ee/ArchivedV/compare/v1.7.4...HEAD
+[1.7.4]: https://github.com/jasonyang-ee/ArchivedV/releases/tag/v1.7.4
