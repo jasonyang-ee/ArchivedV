@@ -92,6 +92,8 @@ ytdlpFlags: string
 | `DOWNLOAD_WATCHDOG_MIN_RUNTIME_MS` | `600000` | 10min min before kill |
 | `PORT` | `3000` | Express port |
 | `TRUST_PROXY` | `1` | Express trust proxy; `false` when ⊥ behind proxy |
+| `AUTH_RATELIMIT_MAX` | `60` | auth/FS-write endpoints max req / 60s window |
+| `STATIC_RATELIMIT_MAX` | `600` | static/FS-read endpoints max req / 1s window |
 
 Fixed paths (⊥ env): `DATA_DIR` = `{cwd}/data`, `DOWNLOAD_DIR` = `{cwd}/download` (`server/config.js:14-15`)
 | `AXIOS_TIMEOUT_MS` | `20000` | RSS HTTP timeout |
@@ -139,6 +141,7 @@ V25: devcontainer ! forward ports 3000 (API) & 5173 (Vite); ⊥ omit 5173
 V26: devcontainer node_modules ! live in named Docker volume; ⊥ overridden by workspace bind mount; `postCreateCommand` ! run `npm install`
 V27: `cleanup-ghcr.yml` `package-name` ! = `archivedv`; ⊥ hardcode other repo names; cleanup `if` ! check only `conclusion == 'success'`
 V28: `dependabot.yml` `open-pull-requests-limit` ! = `0` ∀ ecosystems; security alert scanning ⊥ affected (repo Settings control); ⊥ expose dependency drift via public PRs
+V29: history channel enrichment single-source: `resolveHistoryChannel(item, ctx)` (`server/database.js`) ! sole precedence logic; both `GET /api/history` (`normalizeHistoryItem`, `routes.js`) & `migrateHistoryEntries` (`database.js`) ! call it; ctx = `{channelsById, channelsByUsername, singleChannel, titleMap}`; precedence = channelId → username → (titleMatches.length===1) → singleChannel; titleMap built iff `needsFolderLookup` = ∃ history item ⊥ channelId & ⊥ username & ⊥ channelName; ∴ ⊥ per-request unconditional folder scan; channelName-only item enrichment ! identical @ API & migration
 
 ## §T TASKS
 
@@ -169,6 +172,10 @@ V28: `dependabot.yml` `open-pull-requests-limit` ! = `0` ∀ ecosystems; securit
 | T23 | x | F8: fix devcontainer (base image, node_modules volume, ports, postCreateCommand, extensions) | V25,V26 |
 | T24 | x | F9: fix CONTRIBUTING.md (accuracy, devcontainer section, correct commands) | - |
 | T25 | x | F10: fix cleanup-ghcr.yml (wrong package-name) + dependabot.yml (disable auto-PRs) | V27,V28 |
+| T26 | x | F1 research: confirm history-enrichment call sites + resolveHistoryChannel signature/home/return shape | V29 |
+| T27 | . | F2: extract shared resolveHistoryChannel; both callers use it; gate /api/history titleMap by needsFolderLookup; add unit tests | V29 |
+| T28 | . | F3: line-ending normalization — add .gitattributes (`* text=auto eol=lf`), optional | - |
+| T29 | . | F4: final verify code vs SPEC + CHANGELOG | V29 |
 
 ## §B BUGS
 
