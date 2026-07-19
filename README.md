@@ -61,7 +61,6 @@ services:
     volumes:
       - ./archivedv/data:/app/data
       - ./archivedv/video:/app/download
-    #   - ./archivedv/cookies.txt:/app/data/youtube_cookies.txt:ro   Optional: If you want to manage cookies as a separate file on the host,
     environment:
       TZ: America/Los_Angeles
       # PUSHOVER_APP_TOKEN: ${PUSHOVER_APP_TOKEN}

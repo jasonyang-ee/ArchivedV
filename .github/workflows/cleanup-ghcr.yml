@@ -2,10 +2,8 @@ name: 'Cleanup GHCR Untagged Images'
 
 on:
   workflow_run:
-    workflows: ['Release', 'Check']
+    workflows: ['Release']
     types: [completed]
-  schedule:
-    - cron: '17 3 * * *'
   workflow_dispatch:
 
 permissions:
