@@ -1,43 +1,35 @@
-# HANDOFF 2026-07-18
+# HANDOFF 2026-07-19
 
-branch main | last commit 85185a2 chore: final verification pass — all plan phases complete | tests green
-baseline green | oracle `npm.cmd test` (4 pass) + `npm.cmd run build` + server startup smoke
-uncommitted: none
+branch main | last commit ff81f5a docs: confirm history-enrichment refactor contract (T26) | tests green
+baseline green | oracle `npm test` (4 pass, Node v25.9.0) + `node --check` server/*.js + import smoke routes.js/scheduler.js
+uncommitted: HANDOFF.md (this baton) — commit as `docs: handoff`
 
 ## done this session
-F7: release.sh hardened → 8148bfa
-F8: devcontainer rebuilt → 392c261
-F9: CONTRIBUTING.md accurate; SPEC B3 logged → 4802e70
-F10: cleanup-ghcr package-name archivedv + dependabot limit 0 → c404645
-F5: final verification — ∀ §V grep-verified, tests+build+startup green, T20 x
+F1 (T26): re-verified `resolveHistoryChannel` contract vs live code (routes.js:8,54-77,459-476; database.js:66-136; utils.js:23-27; core.test.js) + landed cook/review-plan planning baseline (SPEC §V29,§I env rows,§T26-29; PLAN F1-F4) → ff81f5a. T26→x
 
 ## in progress (exact stop point)
-∅ — plan complete. NEXT STEP: user invokes /garnish to close cycle (purge PLAN.md + HANDOFF.md)
-mid-edit files: -
+∅ — F1 closed, F2 ⊥ started. NEXT STEP: `/workonplan` → execute F2 (T27) per PLAN.md F2 steps 1-7. Add `export function resolveHistoryChannel(item,{channelsById,channelsByUsername,singleChannel,titleMap})` to `server/database.js` (body = migrate ungated precedence, database.js:91-101); both callers call it; gate `/api/history` titleMap by `needsFolderLookup`; add unit test in core.test.js
+mid-edit files: none
 
 ## next
-∅ | ∀ PLAN.md phases x (T16-T25) | cycle done → /garnish
+F2 (T27) extract helper + gate + tests | preconditions: none (F1 findings in PLAN.md F2 inputs). then F3 (T28) `.gitattributes` decision; F4 (T29) final verify + CHANGELOG
+F1 (T26) = REMOVAL CANDIDATE on next `/cook` (all unknowns resolved)
 
 ## deviations & decisions
-F5: V1-V20 unchanged this cycle → spot-checked touched invariants + full test/build/startup oracle; ⊥ line-by-line re-read of untouched modules
-see prior batons in git history for F7-F10 deviations
+plan: F1 = formality (review-plan pre-confirmed) → workonplan re-verified vs live code + flipped T26→x + committed PLAN/SPEC baseline (PLAN.md updated: y, prior cycle)
+note: enrichment unification aligns routes → migrate ungated precedence for ALL under-populated item shapes (⊥ only channelName-only) e.g. channelId∉channels + folder title-match + coexisting bare item → now folder-matched in API too, = §V29 single-source intent; fully-populated items stay byte-identical
+CHANGELOG: plan puts entry in F4; will add in F2 (phase that ships code) per workonplan per-phase contract, F4 verifies present (minor, end-state identical)
 user decided: -
 
 ## watchouts
-- repo owner ! manually disable "Dependabot security updates" in GitHub Settings (⊥ YAML)
-- CHANGELOG [Unreleased] Added/Changed hold bare `- ` placeholders → release.sh guard strips them; harmless
-- PowerShell `npm` shim blocked → `npm.cmd`; PS here-string commit msgs flaky → Bash tool
-- ⊥ push or tag without explicit user ask
+- `/api/history` byte-identical for fully-populated items (pure refactor + gate); under-populated items now enriched to match migrate (see deviation note) — intended §V29
+- F2 gate: build titleMap iff `needsFolderLookup` = ∃ item ⊥ channelId & ⊥ username & ⊥ channelName; ⊥ per-request scan
+- F2 orphan imports: drop `normalizeHistoryTitle` (`./database.js`) & `buildChannelUrl` (`./utils.js`) from routes.js — each used ONLY in `normalizeHistoryItem` (routes.js:57,68 confirmed via grep); ⊥ `node --check` catch → grep routes.js post-refactor. KEEP `buildDownloadTitleMap` (routes.js:469) + `sanitize` (pre-existing unused, out of scope)
+- EOL: `database.js`+`routes.js` = `i/mixed w/mixed` → F2 ! targeted Edits (⊥ full rewrite); review `git diff` for spurious CRLF↔LF flips
+- regression guard: core.test.js migrate test (updatedCount===3) ! stay green post-F2 = proves migrate preserved thru helper extraction
+- PowerShell `npm` shim may be blocked → `npm.cmd` | Bash tool; Node v25 confirms `node --test` glob works
+- ⊥ push | tag without explicit user ask
 
 ## final verification
 item|status|evidence|decision
-V-ratelimit (F2)|HOLD|routes.js:33,39 use AUTH/STATIC_RATELIMIT_MAX from config|-
-V helper (F2)|HOLD|buildChannelUrl defined utils.js:23 only; 3 importers|-
-V week (F2)|HOLD|downloader.js:143,153 + parseScheduledTime test|-
-V2 dedup (F2)|HOLD|scheduler.js:464 videoId check|-
-V6|HOLD|SPEC wording in-memory; authSkipCache in-process|-
-V21|HOLD|downloader.js:182 dir: info.dir; :581 call passes dir; scheduler.js:111 dir: stream.dir|-
-V22-V24|HOLD|release.sh:269 npm test gate, :228 empty guard, :328-329 push by name|-
-V25-V26|HOLD|devcontainer.json:20 ports 3000+5173, :22 named volume, :26 postCreate npm install|-
-V27-V28|HOLD|cleanup-ghcr.yml:28 archivedv; dependabot limit 0 ×3 ecosystems|-
-T20|HOLD|npm test 4 pass; vite build ok; server starts port 3000 no errors|SPEC
+-|-|-|-
