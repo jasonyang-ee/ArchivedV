@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - History channel enrichment is unified behind a single `resolveHistoryChannel` helper shared by `GET /api/history` and startup migration, so both apply identical channel precedence; `/api/history` now scans download folders only when history has entries missing all channel metadata (previously scanned on every request).
+- Line endings are normalized to LF via a new `.gitattributes` (`* text=auto eol=lf`); existing files convert as they are next modified, avoiding a mass-renormalization diff.
 
 ### Fixed
 

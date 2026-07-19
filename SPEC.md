@@ -174,7 +174,7 @@ V29: history channel enrichment single-source: `resolveHistoryChannel(item, ctx)
 | T25 | x | F10: fix cleanup-ghcr.yml (wrong package-name) + dependabot.yml (disable auto-PRs) | V27,V28 |
 | T26 | x | F1 research: confirm history-enrichment call sites + resolveHistoryChannel signature/home/return shape | V29 |
 | T27 | x | F2: extract shared resolveHistoryChannel; both callers use it; gate /api/history titleMap by needsFolderLookup; add unit tests | V29 |
-| T28 | . | F3: line-ending normalization — add .gitattributes (`* text=auto eol=lf`), optional | - |
+| T28 | x | F3: line-ending normalization — add .gitattributes (`* text=auto eol=lf`), optional | - |
 | T29 | . | F4: final verify code vs SPEC + CHANGELOG | V29 |
 
 ## §B BUGS
