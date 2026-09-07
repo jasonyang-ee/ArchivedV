@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Database writes now replace a completed temporary file; read and migration errors no longer reset valid stored data.
+- Feed refreshes preserve retry attempts and backoff, and active-download deduplication uses explicit video IDs instead of splitting hyphenated identifiers.
+- Failed and cancelled downloads clear persisted active state; cancellation cannot recreate retries or successful history, and recovery merges wait for process closure.
+- yt-dlp and ffmpeg spawn errors are handled without an unhandled process error; duplicate yt-dlp starts reuse the active process.
+- Custom yt-dlp flags share parsing and validation at the API and subprocess boundaries, blocking quoted/abbreviated prohibited options and batch-file/alias bypasses. Invalid saved flags are ignored with a diagnostic.
+- Invalid keyword/channel input is rejected before persistence, and concurrent channel additions cannot create duplicate rows.
+- PR validation runs the test suite and checks the actual `client/dist` build output. Tests use disposable data directories instead of the local archive database.
+- Updated vulnerable locked versions of brace-expansion, browserslist, ip-address, nanoid, postcss, and qs within existing dependency ranges; npm audit reports zero vulnerabilities.
+
 ### Changed
 
 - Updated repository AI-file workflow guidance to the current setup, review, and delegation templates.

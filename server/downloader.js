@@ -31,6 +31,7 @@ import {
   PUSHOVER_USER_TOKEN,
 } from "./config.js";
 import Pushover from "pushover-notifications";
+import { parseYtDlpFlags } from "./ytdlpFlags.js";
 
 // Pushover setup
 const push = new Pushover({
@@ -238,14 +239,14 @@ export function upsertRetryJob(job, update = {}) {
     nextAttemptAt: nowIso(),
     inProgress: false,
     createdAt: nowIso(),
-    updatedAt: nowIso(),
+    ...(idx === -1 ? {} : db.data.retryQueue[idx]),
     ...job,
     ...update,
     updatedAt: nowIso(),
   };
 
   if (idx === -1) db.data.retryQueue.push(merged);
-  else db.data.retryQueue[idx] = { ...db.data.retryQueue[idx], ...merged };
+  else db.data.retryQueue[idx] = merged;
   db.write();
   return merged;
 }
@@ -312,46 +313,19 @@ function handleDownloadSuccess(dir, downloadInfo, note = null) {
 // Get user-defined yt-dlp flags from database
 function getUserYtDlpFlags() {
   db.read();
-  const flags = db.data.ytdlpFlags || '';
-  if (!flags.trim()) return [];
-  
-  // Parse the flags string into an array of arguments
-  // Handle quoted strings and escape sequences
-  const args = [];
-  let current = '';
-  let inQuote = false;
-  let quoteChar = '';
-  
-  for (let i = 0; i < flags.length; i++) {
-    const char = flags[i];
-    
-    if (inQuote) {
-      if (char === quoteChar) {
-        inQuote = false;
-      } else {
-        current += char;
-      }
-    } else if (char === '"' || char === "'") {
-      inQuote = true;
-      quoteChar = char;
-    } else if (char === ' ' || char === '\t') {
-      if (current) {
-        args.push(current);
-        current = '';
-      }
-    } else {
-      current += char;
-    }
+  try {
+    return parseYtDlpFlags(db.data.ytdlpFlags || "");
+  } catch {
+    console.error("[ERROR] [Archived V] Ignoring invalid or prohibited saved yt-dlp flags");
+    return [];
   }
-  
-  if (current) {
-    args.push(current);
-  }
-  
-  return args;
 }
 
 export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
+  for (const download of activeDownloads.values()) {
+    if (download.downloadInfo.channel === downloadInfo.channel &&
+        download.downloadInfo.videoId === downloadInfo.videoId) return download.proc;
+  }
   const userFlags = getUserYtDlpFlags();
   
   const args = [
@@ -408,6 +382,12 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
   };
 
   activeDownloads.set(downloadId, tracking);
+
+  // Failed spawns emit error before close; close owns cleanup and retrying.
+  proc.on("error", (error) => {
+    tracking.stderr += `\n${error.message}`;
+    console.error(`[ERROR] [Archived V] yt-dlp process error: ${error.message}`);
+  });
 
   proc.stdout.on("data", (chunk) => {
     tracking.lastOutputAt = Date.now();
@@ -485,24 +465,27 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
     status.currentDownloads = status.currentDownloads.filter((d) => d.id !== downloadId);
     db.read();
     db.data.currentDownloads = (db.data.currentDownloads || []).filter((d) => d.id !== downloadId);
+    db.write();
+
+    if (tracking.cancelled) {
+      autoMerge(dir);
+      return;
+    }
 
     // If killed by 403 loop, treat as stream ended - clean up and mark as complete
     if (tracking.killedBy403Loop) {
       handleDownloadSuccess(dir, downloadInfo, "stream ended");
-      db.write();
       console.log(`[INFO] [Archived V] Stream ended for "${downloadInfo.title}" - download complete (403 loop detected)`);
       return;
     }
 
     // If watchdog or auth-skip killed it, they already handled requeue - just clean up
     if (tracking.killedByWatchdog || tracking.killedByAuthSkip) {
-      db.write();
       return;
     }
 
     if (code === 0) {
       handleDownloadSuccess(dir, downloadInfo);
-      db.write();
       return;
     }
 
@@ -556,7 +539,6 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
     // If we ended up with a usable merged file, treat it as success.
     if (folderState.kind === "complete") {
       handleDownloadSuccess(dir, downloadInfo);
-      db.write();
       console.warn(
         `[WARN] [Archived V] yt-dlp exited ${code} but produced a usable file for "${downloadInfo.title}"; recording as success.`
       );
@@ -583,11 +565,6 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
           scheduledFor
         );
 
-        // Restore filtered currentDownloads
-        db.read();
-        db.data.currentDownloads = (db.data.currentDownloads || []).filter((d) => d.id !== downloadId);
-        db.write();
-
         // Clean up empty folder if one was created
         if (folderState.kind === "empty") {
           safeCleanupDirectory(dir, "scheduled stream (not yet live)");
@@ -610,9 +587,6 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
     );
     const attempts = (existing?.attempts || 0) + 1;
 
-    // Store the filtered currentDownloads before upsertRetryJob overwrites it
-    const filteredCurrentDownloads = db.data.currentDownloads;
-
     upsertRetryJob(
       {
         channelId: downloadInfo.channel,
@@ -630,11 +604,6 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
         inProgress: false,
       }
     );
-
-    // Restore and write the filtered currentDownloads (upsertRetryJob may have done a db.read())
-    db.read();
-    db.data.currentDownloads = filteredCurrentDownloads;
-    db.write();
 
     // Try cleaning up only if truly empty
     if (folderState.kind === "empty") {

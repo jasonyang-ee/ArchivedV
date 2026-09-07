@@ -302,9 +302,10 @@ export async function checkUpdates() {
     const uniqueDownloads = [];
 
     for (const download of db.data.currentDownloads) {
-      // Extract video identifier from the download (channel + video portion of ID)
-      const idParts = download.id.split("-");
-      const videoKey = `${download.channel}-${idParts[1]}`; // channel-videoId
+      // IDs may contain hyphens; use explicit identity when available.
+      const videoKey = download.videoId
+        ? `${download.channel}-${download.videoId}`
+        : download.id;
 
       if (!seenVideos.has(videoKey)) {
         seenVideos.add(videoKey);
@@ -523,10 +524,6 @@ export async function checkUpdates() {
               channelName: ch.channelName || ch.username,
               videoLink,
               dir,
-            },
-            {
-              nextAttemptAt: nowIso(),
-              inProgress: false,
             }
           );
         }

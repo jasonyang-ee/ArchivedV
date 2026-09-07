@@ -6,14 +6,12 @@ import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
 import { Parser, processors } from "xml2js";
 import db, { buildDownloadTitleMap, resolveHistoryChannel } from "./database.js";
-import { autoMerge } from "./merger.js";
 import { clearAuthSkipCache } from "./auth.js";
-import { isValidYouTubeUrl, sanitize } from "./utils.js";
+import { isValidYouTubeUrl } from "./utils.js";
+import { parseYtDlpFlags } from "./ytdlpFlags.js";
 import {
   status,
   activeDownloads,
-  inspectDownloadFolder,
-  upsertRetryJob,
   safeCleanupDirectory,
 } from "./downloader.js";
 import { checkUpdates } from "./scheduler.js";
@@ -161,20 +159,15 @@ router.get("/api/ytdlp-flags", (req, res) => {
 
 // API: Update yt-dlp custom flags
 router.post("/api/ytdlp-flags", (req, res) => {
-  const { ytdlpFlags } = req.body;
+  const { ytdlpFlags } = req.body || {};
   if (typeof ytdlpFlags !== "string") {
     return res.status(400).json({ error: "ytdlpFlags must be a string" });
   }
 
-  // Basic validation - prevent potentially dangerous flags
-  const dangerousFlags = ["--exec", "--config-location", "--batch-file"];
-  const flagsLower = ytdlpFlags.toLowerCase();
-  for (const dangerous of dangerousFlags) {
-    if (flagsLower.includes(dangerous)) {
-      return res.status(400).json({
-        error: `Flag "${dangerous}" is not allowed for security reasons`,
-      });
-    }
+  try {
+    parseYtDlpFlags(ytdlpFlags);
+  } catch (error) {
+    return res.status(400).json({ error: error.message });
   }
 
   db.read();
@@ -185,8 +178,10 @@ router.post("/api/ytdlp-flags", (req, res) => {
 
 // API: Add channel
 router.post("/api/channels", async (req, res) => {
-  let { link } = req.body;
-  if (!link) return res.status(400).json({ error: "No link provided" });
+  let { link } = req.body || {};
+  if (typeof link !== "string" || !link.trim()) {
+    return res.status(400).json({ error: "A non-empty channel link is required" });
+  }
 
   // Trim whitespace
   link = link.trim();
@@ -267,9 +262,6 @@ router.post("/api/channels", async (req, res) => {
     username = id;
   }
 
-  db.read();
-  const existing = db.data.channels.find((c) => c.id === id);
-
   // Try to fetch the actual channel name from RSS feed
   let channelName = username;
   try {
@@ -292,6 +284,9 @@ router.post("/api/channels", async (req, res) => {
     console.warn("[WARN] [Archived V] Failed to fetch channel name from RSS, using username");
   }
 
+  // Fetches yield to other requests; resolve the existing row only after them.
+  db.read();
+  const existing = db.data.channels.find((c) => c.id === id);
   if (!existing) {
     // Final validation before saving
     if (!isValidYouTubeUrl(xmlLink)) {
@@ -321,8 +316,10 @@ router.delete("/api/channels/:id", (req, res) => {
 
 // API: Add keyword
 router.post("/api/keywords", (req, res) => {
-  const { keyword } = req.body;
-  if (!keyword) return res.status(400).json({ error: "No keyword provided" });
+  const { keyword } = req.body || {};
+  if (typeof keyword !== "string" || !keyword.trim()) {
+    return res.status(400).json({ error: "A non-empty keyword is required" });
+  }
   db.read();
   if (!db.data.keywords.includes(keyword)) {
     db.data.keywords.push(keyword);
@@ -342,8 +339,10 @@ router.delete("/api/keywords/:keyword", (req, res) => {
 
 // API: Add ignore keyword
 router.post("/api/ignore-keywords", (req, res) => {
-  const { keyword } = req.body;
-  if (!keyword) return res.status(400).json({ error: "No keyword provided" });
+  const { keyword } = req.body || {};
+  if (typeof keyword !== "string" || !keyword.trim()) {
+    return res.status(400).json({ error: "A non-empty keyword is required" });
+  }
   db.read();
   if (!db.data.ignoreKeywords) db.data.ignoreKeywords = [];
   if (!db.data.ignoreKeywords.includes(keyword)) {
@@ -365,7 +364,7 @@ router.delete("/api/ignore-keywords/:keyword", (req, res) => {
 
 // API: Update date format
 router.post("/api/date-format", (req, res) => {
-  const { dateFormat } = req.body;
+  const { dateFormat } = req.body || {};
   if (!dateFormat || !["YYYY-MM-DD", "MM-DD-YYYY"].includes(dateFormat)) {
     return res
       .status(400)
@@ -397,6 +396,7 @@ router.delete("/api/downloads/:downloadId", (req, res) => {
 
   try {
     // Kill the yt-dlp process
+    download.cancelled = true;
     download.proc.kill("SIGTERM");
 
     // Remove from active downloads
@@ -433,9 +433,7 @@ router.delete("/api/downloads/:downloadId", (req, res) => {
 
     console.log(`[INFO] [Archived V] Cancelled download: ${cancelledTitle}`);
 
-    // Trigger auto-merge in case partial files exist
-    console.log("[INFO] [Archived V] Triggering auto-merge after download cancellation");
-    autoMerge(download.dir);
+    // The process close handler merges partial files after handles are released.
 
     res.json({
       success: true,

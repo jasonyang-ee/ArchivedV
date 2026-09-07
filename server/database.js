@@ -158,85 +158,96 @@ if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR, { recursive: true }
 // Database helper
 const db = {
   data: createDefaultData(),
-  
+
   read() {
     if (!fs.existsSync(DB_PATH)) {
       this.data = createDefaultData();
-      fs.writeFileSync(DB_PATH, JSON.stringify(this.data, null, 2));
+      this.write();
     } else {
+      const file = fs.readFileSync(DB_PATH, "utf-8");
       try {
-        const file = fs.readFileSync(DB_PATH, "utf-8");
         this.data = JSON.parse(file);
-        let shouldWrite = false;
-        
-        // Ensure all fields exist with defaults
-        if (!this.data.history) this.data.history = [];
-        if (!this.data.ignoreKeywords) this.data.ignoreKeywords = [];
-        if (!this.data.dateFormat) this.data.dateFormat = 'YYYY-MM-DD';
-        if (!this.data.retryQueue) this.data.retryQueue = [];
-        if (!this.data.scheduledStreams) this.data.scheduledStreams = [];
-        if (!this.data.auth) this.data.auth = { useCookies: false };
-        if (typeof this.data.auth.useCookies !== "boolean") this.data.auth.useCookies = false;
-        if (typeof this.data.ytdlpFlags !== "string") this.data.ytdlpFlags = '';
-        
-        // Migrate old format to new format
-        if (this.data.currentDownload && !this.data.currentDownloads) {
-          this.data.currentDownloads = [];
-          if (this.data.currentDownload.title) {
-            this.data.currentDownloads.push({
-              id: Date.now().toString(),
-              channel: this.data.currentDownload.channel,
-              title: this.data.currentDownload.title,
-              username: this.data.currentDownload.username,
-              startTime: new Date().toISOString()
-            });
-          }
-          delete this.data.currentDownload;
-          shouldWrite = true;
-        }
-        
-        // Ensure currentDownloads exists
-        if (!this.data.currentDownloads) {
-          this.data.currentDownloads = [];
-          shouldWrite = true;
-        }
-        
-        // Clean up old currentDownload field if currentDownloads exists
-        if (this.data.currentDownloads && this.data.currentDownload) {
-          delete this.data.currentDownload;
-          shouldWrite = true;
-        }
-
-        if (!hasAttemptedHistoryMigration) {
-          const migration = migrateHistoryEntries(this.data);
-          hasAttemptedHistoryMigration = true;
-
-          if (migration.changed) {
-            shouldWrite = true;
-            console.log(
-              `[INFO] [Archived V] Migrated ${migration.updatedCount} history entr${migration.updatedCount === 1 ? 'y' : 'ies'} with channel metadata`
-            );
-          }
-
-          if (migration.unresolvedCount > 0) {
-            console.warn(
-              `[WARN] [Archived V] ${migration.unresolvedCount} history entr${migration.unresolvedCount === 1 ? 'y is' : 'ies are'} still missing channel metadata`
-            );
-          }
-        }
-
-        if (shouldWrite) {
-          this.write();
-        }
-      } catch {
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
         this.data = createDefaultData();
-        fs.writeFileSync(DB_PATH, JSON.stringify(this.data, null, 2));
+        this.write();
+        return;
+      }
+      let shouldWrite = false;
+
+      // Ensure all fields exist with defaults
+      if (!this.data.history) this.data.history = [];
+      if (!this.data.ignoreKeywords) this.data.ignoreKeywords = [];
+      if (!this.data.dateFormat) this.data.dateFormat = 'YYYY-MM-DD';
+      if (!this.data.retryQueue) this.data.retryQueue = [];
+      if (!this.data.scheduledStreams) this.data.scheduledStreams = [];
+      if (!this.data.auth) this.data.auth = { useCookies: false };
+      if (typeof this.data.auth.useCookies !== "boolean") this.data.auth.useCookies = false;
+      if (typeof this.data.ytdlpFlags !== "string") this.data.ytdlpFlags = '';
+
+      // Migrate old format to new format
+      if (this.data.currentDownload && !this.data.currentDownloads) {
+        this.data.currentDownloads = [];
+        if (this.data.currentDownload.title) {
+          this.data.currentDownloads.push({
+            id: Date.now().toString(),
+            channel: this.data.currentDownload.channel,
+            title: this.data.currentDownload.title,
+            username: this.data.currentDownload.username,
+            startTime: new Date().toISOString()
+          });
+        }
+        delete this.data.currentDownload;
+        shouldWrite = true;
+      }
+
+      // Ensure currentDownloads exists
+      if (!this.data.currentDownloads) {
+        this.data.currentDownloads = [];
+        shouldWrite = true;
+      }
+
+      // Clean up old currentDownload field if currentDownloads exists
+      if (this.data.currentDownloads && this.data.currentDownload) {
+        delete this.data.currentDownload;
+        shouldWrite = true;
+      }
+
+      if (!hasAttemptedHistoryMigration) {
+        const migration = migrateHistoryEntries(this.data);
+        hasAttemptedHistoryMigration = true;
+
+        if (migration.changed) {
+          shouldWrite = true;
+          console.log(
+            `[INFO] [Archived V] Migrated ${migration.updatedCount} history entr${migration.updatedCount === 1 ? 'y' : 'ies'} with channel metadata`
+          );
+        }
+
+        if (migration.unresolvedCount > 0) {
+          console.warn(
+            `[WARN] [Archived V] ${migration.unresolvedCount} history entr${migration.unresolvedCount === 1 ? 'y is' : 'ies are'} still missing channel metadata`
+          );
+        }
+      }
+
+      if (shouldWrite) {
+        this.write();
       }
     }
   },
-  
+
   write() {
-    fs.writeFileSync(DB_PATH, JSON.stringify(this.data, null, 2));
+    // Replace only after serialization and the complete write succeed. An
+    // interrupted write must not truncate the last usable database.
+    const json = JSON.stringify(this.data, null, 2);
+    const temporaryPath = `${DB_PATH}.tmp`;
+    try {
+      fs.writeFileSync(temporaryPath, json, { encoding: "utf8", mode: 0o600 });
+      fs.renameSync(temporaryPath, DB_PATH);
+    } finally {
+      if (fs.existsSync(temporaryPath)) fs.unlinkSync(temporaryPath);
+    }
   },
 };
 

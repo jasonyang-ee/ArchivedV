@@ -380,6 +380,11 @@ export function mergeInFolder(folder, callback = null) {
         proc.stderr.on('data', (data) => {
           stderrOutput += data.toString();
         });
+
+        // close follows a failed spawn too; keep callback/cleanup ownership there.
+        proc.on('error', (error) => {
+          stderrOutput += `\n${error.message}`;
+        });
         
         proc.on('close', (code) => {
           if (code === 0) {
