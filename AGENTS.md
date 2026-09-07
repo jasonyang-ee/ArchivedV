@@ -11,11 +11,15 @@
 2. `/prep` → iterative PLAN.md + HANDOFF.md + SPEC.md handoff
 3. `/review-plan` → research/refute plan → GO/NO-GO
 4. `/cook` → execute all remaining phases in order → verify → commit → handoff after each phase. Optional phase arg → target one phase. Single main agent.
-5. `/cater` → same phases via sub-agents, parallel when file sets ⊥ intersect. 4 | 5 exclusive per phase, ⊥ both.
+5. `/cater` → adapt per ready phase: direct via loaded `cook` when delegation lacks material benefit | sub-agents when parallelism, context isolation, or specialist capability pays; before dispatch show scope, agent type, model, effort, rationale. Top-level 4 | 5 exclusive; one phase ⊥ direct + delegated.
 6. `/garnish` → SPEC.md cleanup → blank PLAN.md + HANDOFF.md to template
-7. `/review-code` → baseline code sweep → prep
+7. `/review-code` → baseline code sweep → prep for accepted, authorized follow-up work
 
-support: `/handoff` session baton | `/encode-docs` sole mutator of `SPEC.md`, `PLAN.md`, and `HANDOFF.md` | `encode-header` header template | `/encode-commit` commit summary | `/encode-pr` PR review comments
+Default order above; authorized retained-cycle review may precede garnish: `/review-code` against an explicit branch/ref uses plan/baton context → preserve findings, baseline and task evidence → `/garnish` only after valid completion → `/prep` for accepted actionable work. Failed closure preserves old cycle; active execution → authorized prep queues findings. Plain review ⊥ authorize cleanup/planning; no actionable work ⊥ empty cycle.
+
+Standalone `/review-vibe` → current-codebase review + direct evidenced fixes without requiring baseline or plan. Preserve active task ownership and unrelated edits; durable spec corrections via `encode-docs`.
+
+support: `/handoff` session baton | `/encode-docs` sole mutator of `SPEC.md`, `PLAN.md`, and `HANDOFF.md` | `encode-header` header template | `/encode-agent` bounded sub-agent prompt | `/encode-commit` commit summary | `/encode-pr` PR review comments
 
 ## Project Scripts:
 
@@ -40,6 +44,6 @@ Use symbols below as short, exact operators. Preserve paths, code, IDs, URLs, nu
 Tables use `|`; escape literal `\|`. SPEC `§C`/`§I`/`§R`/`§V` tables carry a GFM delimiter row (`|---|---|`, one cell per column) under the header. `§T` status: `x` done, `~` wip, `.` todo.
 
 ## End of Chat Checklist
-- Ensure repo tests pass.
+- Run required repository checks; report exact failures or unavailable checks.
 - Update `CHANGELOG.md` `## [Unreleased]` ∀ feature/fix.
-- Commit directly (single summary commit, no AI co-author trailer). ⊥ push | tag without explicit ask.
+- Follow repository commit policy: commit directly as a single summary commit without an AI co-author trailer; stage only owned work. ⊥ push | tag without explicit ask.

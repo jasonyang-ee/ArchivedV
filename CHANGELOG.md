@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Updated repository AI-file workflow guidance to the current setup, review, and delegation templates.
+
 ## [1.7.4] - 2026-07-19
 
 ### Added
