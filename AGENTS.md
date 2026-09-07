@@ -15,11 +15,9 @@
 6. `/garnish` → SPEC.md cleanup → blank PLAN.md + HANDOFF.md to template
 7. `/review-code` → baseline code sweep → prep for accepted, authorized follow-up work
 
-Default order above; authorized retained-cycle review may precede garnish: `/review-code` against an explicit branch/ref uses plan/baton context → preserve findings, baseline and task evidence → `/garnish` only after valid completion → `/prep` for accepted actionable work. Failed closure preserves old cycle; active execution → authorized prep queues findings. Plain review ⊥ authorize cleanup/planning; no actionable work ⊥ empty cycle.
-
-Standalone `/review-vibe` → current-codebase review + direct evidenced fixes without requiring baseline or plan. Preserve active task ownership and unrelated edits; durable spec corrections via `encode-docs`.
-
 support: `/handoff` session baton | `/encode-docs` sole mutator of `SPEC.md`, `PLAN.md`, and `HANDOFF.md` | `encode-header` header template | `/encode-agent` bounded sub-agent prompt | `/encode-commit` commit summary | `/encode-pr` PR review comments
+
+standalone: `/review-vibe` free style review
 
 ## Project Scripts:
 
