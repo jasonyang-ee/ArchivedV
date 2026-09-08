@@ -15,9 +15,11 @@
 6. `/garnish` → SPEC.md cleanup → blank PLAN.md + HANDOFF.md to template
 7. `/review-code` → baseline code sweep → prep for accepted, authorized follow-up work
 
+Research before coding is required; a numbered research phase is optional when current prep/review-plan evidence covers the scope. Keep the evidence and gate in PLAN.md; missing/stale evidence loads review-plan in the main agent before execution-state transition, direct work, or dispatch. Consequential unknowns block dependent coding; final verification remains last.
+
 support: `/handoff` session baton | `/encode-docs` sole mutator of `SPEC.md`, `PLAN.md`, and `HANDOFF.md` | `encode-header` header template | `/encode-agent` bounded sub-agent prompt | `/encode-commit` commit summary | `/encode-pr` PR review comments
 
-standalone: `/review-vibe` free style review
+standalone: `/review-vibe` → direct user-requested review and fixes, including matching natural language; no other skill may invoke/load it as a phase, hook, or helper. It may use encoding helpers itself. A small scoped review, including a whole tiny codebase, completed and verified in one session/context may omit REVIEW.md; work beyond that scope or unfinished work keeps a coverage/resume record unless user output preferences override.
 
 ## Project Scripts:
 
