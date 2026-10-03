@@ -1,7 +1,8 @@
 import fs from "fs";
 import path from "path";
+import { randomUUID } from "node:crypto";
 import { DB_PATH, DATA_DIR, DOWNLOAD_DIR } from "./config.js";
-import { buildChannelUrl, sanitize } from "./utils.js";
+import { buildChannelUrl, sanitize, isSafeDownloadPath } from "./utils.js";
 
 function createDefaultData() {
   return {
@@ -37,7 +38,7 @@ export function buildDownloadTitleMap(channels) {
     if (!channelDirName) continue;
 
     const channelDir = path.join(DOWNLOAD_DIR, channelDirName);
-    if (!fs.existsSync(channelDir)) continue;
+    if (!isSafeDownloadPath(channelDir) || !fs.existsSync(channelDir)) continue;
 
     let entries = [];
     try {
@@ -169,11 +170,21 @@ const db = {
         this.data = JSON.parse(file);
       } catch (error) {
         if (!(error instanceof SyntaxError)) throw error;
+        // Preserve the exact corrupt input before the documented reset. Failure
+        // to create the backup must leave the original database untouched.
+        fs.copyFileSync(DB_PATH, `${DB_PATH}.corrupt-${randomUUID()}`, fs.constants.COPYFILE_EXCL);
         this.data = createDefaultData();
         this.write();
         return;
       }
+      if (!this.data || typeof this.data !== "object" || Array.isArray(this.data)) throw new Error("Invalid database object; original file preserved");
+      for (const field of ["channels", "keywords", "ignoreKeywords", "history", "currentDownloads", "retryQueue", "scheduledStreams"]) {
+        if (this.data[field] !== undefined && !Array.isArray(this.data[field])) throw new Error(`Invalid database field: ${field}; original file preserved`);
+      }
+      if (this.data.auth !== undefined && (!this.data.auth || typeof this.data.auth !== "object" || Array.isArray(this.data.auth))) throw new Error("Invalid database auth field; original file preserved");
       let shouldWrite = false;
+      this.data.channels ??= [];
+      this.data.keywords ??= [];
 
       // Ensure all fields exist with defaults
       if (!this.data.history) this.data.history = [];
@@ -241,9 +252,9 @@ const db = {
     // Replace only after serialization and the complete write succeed. An
     // interrupted write must not truncate the last usable database.
     const json = JSON.stringify(this.data, null, 2);
-    const temporaryPath = `${DB_PATH}.tmp`;
+    const temporaryPath = `${DB_PATH}.${randomUUID()}.tmp`;
     try {
-      fs.writeFileSync(temporaryPath, json, { encoding: "utf8", mode: 0o600 });
+      fs.writeFileSync(temporaryPath, json, { encoding: "utf8", mode: 0o600, flag: "wx", flush: true });
       fs.renameSync(temporaryPath, DB_PATH);
     } finally {
       if (fs.existsSync(temporaryPath)) fs.unlinkSync(temporaryPath);

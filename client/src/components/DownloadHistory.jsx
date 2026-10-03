@@ -1,3 +1,4 @@
+import ActionButton from "./ActionButton";
 import React from "react";
 import { formatDate } from "../utils/utils";
 
@@ -9,12 +10,12 @@ function DownloadHistory({ history, onClearHistory }) {
           Download History
         </h2>
         {history.length > 0 && (
-          <button
+          <ActionButton
             onClick={onClearHistory}
             className="btn btn-danger text-sm"
           >
             Clear History
-          </button>
+          </ActionButton>
         )}
       </div>
 
@@ -61,12 +62,12 @@ function DownloadHistory({ history, onClearHistory }) {
                             href={item.channelUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="font-medium text-primary-400 hover:text-primary-500 dark:text-primary-300 dark:hover:text-primary-200 hover:underline underline-offset-2 transition-colors"
+                            className="font-medium text-primary-700 hover:text-primary-800 dark:text-primary-300 dark:hover:text-primary-200 hover:underline underline-offset-2 transition-colors"
                           >
                             {channelLabel}
                           </a>
                         ) : (
-                          <span className="font-medium text-primary-400 dark:text-primary-300">
+                          <span className="font-medium text-primary-700 dark:text-primary-300">
                             {channelLabel}
                           </span>
                         ))}

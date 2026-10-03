@@ -118,7 +118,7 @@ Test the running application:
 
 1. Start the server:
    ```bash
-   npm start
+   npm run build && npm start
    ```
 
 2. Test the API endpoint:

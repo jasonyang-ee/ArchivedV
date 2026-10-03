@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Downloads only enter successful history after saved output is present; failed exits, 403 loops, incomplete merges and exhausted authentication attempts retain correct retry/skip behavior.
+- Recovery merges own their folders, publish checked temporary output without overwriting finals, preserve usable source streams on failure, and time out stalled ffmpeg processes. Unreadable folders no longer stop the remaining recovery scan.
+- Download folders include video IDs, retain existing job paths, and avoid conflating same-title streams. Completed retry folders reconcile history without another capture; removed channels and scheduled streams cannot silently requeue.
+- Server shutdown stops captures, descendant processes and recovery merges while retaining unfinished jobs for restart. Watchdog activity includes media writes, and cancellation retains process ownership until closure.
+- Cookie uploads validate Netscape records and replace credentials atomically with private permissions. Archive paths reject unsafe identifiers/symlinks; malformed database input is preserved before reset.
+- Dashboard actions share pending/error feedback, preserve failed drafts, reject failed HTTP responses, and expose stale polling data. Delayed responses cannot erase newer saved changes. Labels, keyboard focus, both themes, long-content wrapping and desktop layout now follow shared UI conventions.
+- CI checks run without publishing or requiring registry secrets, container health checks exercise the API, startup preserves server failure codes, and releases recognize breaking commit subjects/footers.
 - Database writes now replace a completed temporary file; read and migration errors no longer reset valid stored data.
 - Feed refreshes preserve retry attempts and backoff, and active-download deduplication uses explicit video IDs instead of splitting hyphenated identifiers.
 - Failed and cancelled downloads clear persisted active state; cancellation cannot recreate retries or successful history, and recovery merges wait for process closure.
@@ -20,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Expanded `SPEC.md` into the system contract for every module, API, stored schema, download transition, archive layout, UI interaction, runtime setting and verification requirement; documented current limits and future reliability/UI acceptance criteria.
+- Restricted custom yt-dlp flags to supported metadata, subtitle, format and retry controls; arbitrary executable/configuration/output overrides are rejected. Existing unsupported saved options fall back to safe defaults with a diagnostic.
+- Runtime requires Node 24 or later and uses native watch mode; removed nodemon/CORS dependencies, refreshed the vulnerable ip-address lock entry, and run Docker as the non-root node user.
 - Updated repository AI-file workflow guidance to the current setup, review, and delegation templates.
 
 ## [1.7.4] - 2026-07-19

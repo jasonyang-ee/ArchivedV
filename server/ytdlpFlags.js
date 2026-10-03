@@ -27,15 +27,29 @@ export function parseYtDlpFlags(flags) {
   if (quote) throw new Error("Unterminated quote in ytdlpFlags");
   if (started) args.push(current);
 
-  const forbidden = ["--exec", "--exec-before-download", "--config-locations", "--batch-file", "--alias"];
-  for (const arg of args) {
-    const option = arg.split("=", 1)[0].toLowerCase();
-    const blocked = option.startsWith("--") && option.length > 2 &&
-      forbidden.some((flag) => flag.startsWith(option));
-    // -a is the batch-file alias, including bundled short options/attached values.
-    if (blocked || /^-[^-]*a/.test(arg)) {
-      throw new Error(`Flag "${option}" is not allowed for security reasons`);
-    }
+  // Arbitrary yt-dlp options can launch executables, read secrets or write outside
+  // the archive. Only options whose effects remain inside the managed job belong here.
+  const switches = new Set([
+    "--write-description", "--no-write-description", "--write-info-json", "--no-write-info-json",
+    "--write-subs", "--no-write-subs", "--write-auto-subs", "--no-write-auto-subs",
+    "--embed-subs", "--no-embed-subs", "--embed-chapters", "--no-embed-chapters",
+    "--embed-metadata", "--no-embed-metadata", "--add-metadata", "--no-add-metadata",
+    "--force-ipv4", "--force-ipv6", "-4", "-6",
+  ]);
+  const values = new Set([
+    "--format", "-f", "--format-sort", "-S", "--limit-rate", "-r", "--throttled-rate",
+    "--retries", "-R", "--fragment-retries", "--file-access-retries", "--socket-timeout",
+    "--concurrent-fragments", "-N", "--sleep-interval", "--max-sleep-interval",
+    "--sub-langs", "--sub-format",
+  ]);
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    const equals = arg.indexOf("=");
+    const option = equals === -1 ? arg : arg.slice(0, equals);
+    if (switches.has(option) && equals === -1) continue;
+    if (!values.has(option)) throw new Error(`Flag "${option}" is not allowed; use supported download, format or subtitle options`);
+    const value = equals === -1 ? args[++index] : arg.slice(equals + 1);
+    if (!value || value.startsWith("-")) throw new Error(`Flag "${option}" requires a value`);
   }
   return args;
 }

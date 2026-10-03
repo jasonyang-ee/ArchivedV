@@ -1,3 +1,4 @@
+import ActionButton from "./ActionButton";
 import React from "react";
 import { formatDate } from "../utils/utils";
 
@@ -6,6 +7,7 @@ function formatRelativeTime(isoString) {
     const target = new Date(isoString).getTime();
     const now = Date.now();
     const diff = target - now;
+    if (!Number.isFinite(diff)) return "time unknown";
     if (diff <= 0) return "any moment now";
     const minutes = Math.floor(diff / 60000);
     if (minutes < 60) return `in ${minutes}m`;
@@ -30,9 +32,11 @@ function StatusDisplay({ status, onRefresh, onCancelDownload, onRemoveScheduledS
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
           Status
         </h2>
-        <button
+        <ActionButton
           onClick={onRefresh}
-          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors flex items-center gap-2"
+          pendingText="Checking..."
+          successText="Check requested"
+          className="btn btn-primary flex items-center gap-2"
         >
           <svg
             className="w-4 h-4"
@@ -48,7 +52,7 @@ function StatusDisplay({ status, onRefresh, onCancelDownload, onRemoveScheduledS
             />
           </svg>
           Refresh Now
-        </button>
+        </ActionButton>
       </div>
 
       {/* Info Banner */}
@@ -75,8 +79,11 @@ function StatusDisplay({ status, onRefresh, onCancelDownload, onRemoveScheduledS
       </div>
 
       <div className="space-y-4">
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          Saved folders at last scan: {status.downloadedCount || 0} • Retry queue: {status.retryQueue?.total || 0} ({status.retryQueue?.due || 0} ready)
+        </p>
         {/* Last Run */}
-        <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-1 sm:gap-4 items-start p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
+        <div className="grid grid-cols-1 sm:grid-cols-[140px_minmax(0,1fr)] gap-1 sm:gap-4 items-start p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
             Last Run:
           </span>
@@ -86,7 +93,7 @@ function StatusDisplay({ status, onRefresh, onCancelDownload, onRemoveScheduledS
         </div>
 
         {/* Last Completed */}
-        <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-1 sm:gap-4 items-start p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
+        <div className="grid grid-cols-1 sm:grid-cols-[140px_minmax(0,1fr)] gap-1 sm:gap-4 items-start p-3 bg-gray-50 dark:bg-[#333333] rounded-lg">
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
             Last Completed:
           </span>
@@ -119,16 +126,16 @@ function StatusDisplay({ status, onRefresh, onCancelDownload, onRemoveScheduledS
                       <div className="text-sm text-gray-900 dark:text-gray-100 font-medium wrap-break-word">
                         {download.title}
                         <a
-                          href={download.videoLink}
+                          href={`https://www.youtube.com/watch?v=${encodeURIComponent(download.videoId)}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-sm mx-2 sm:mx-3 text-primary-600 dark:text-primary-400 hover:underline"
+                          className="text-sm mx-2 sm:mx-3 text-primary-700 dark:text-primary-400 hover:underline"
                         >
                           View →
                         </a>
                       </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        Channel: {download.channelName || download.username} • Started: {formatDate(download.startTime)}
+                        {download.phase === "saving" ? "Saving video • " : "Downloading • "}Channel: {download.channelName || download.username} • Started: {formatDate(download.startTime)}
                       </div>
                     </div>
                     <svg
@@ -146,17 +153,17 @@ function StatusDisplay({ status, onRefresh, onCancelDownload, onRemoveScheduledS
                     </svg>
                   </div>
                   <div className="mt-2 flex justify-end">
-                    <button
+                    <ActionButton
                       onClick={() => {
-                        if (window.confirm(`Cancel download: ${download.title}?`)) {
-                          onCancelDownload(download.id);
+                        if (window.confirm(`Abort ${download.title}? Its title will be added to ignore keywords. Saved media will be kept.`)) {
+                          return onCancelDownload(download.id);
                         }
                       }}
                       className="px-3 py-1.5 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30 rounded-lg transition-colors border border-red-200 dark:border-red-800"
                       title="Cancel download"
                     >
                       Abort Download
-                    </button>
+                    </ActionButton>
                   </div>
                 </div>
               ))}
@@ -184,10 +191,10 @@ function StatusDisplay({ status, onRefresh, onCancelDownload, onRemoveScheduledS
                       <div className="text-sm text-gray-900 dark:text-gray-100 font-medium wrap-break-word">
                         {stream.title}
                         <a
-                          href={stream.videoLink}
+                          href={`https://www.youtube.com/watch?v=${encodeURIComponent(stream.videoId)}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-sm mx-2 sm:mx-3 text-primary-600 dark:text-primary-400 hover:underline"
+                          className="text-sm mx-2 sm:mx-3 text-primary-700 dark:text-primary-400 hover:underline"
                         >
                           View →
                         </a>
@@ -215,23 +222,23 @@ function StatusDisplay({ status, onRefresh, onCancelDownload, onRemoveScheduledS
                     </svg>
                   </div>
                   <div className="mt-2 flex justify-end">
-                    <button
+                    <ActionButton
                       onClick={() => {
-                        if (window.confirm(`Remove scheduled stream: ${stream.title}?`)) {
-                          onRemoveScheduledStream(stream.videoId);
+                        if (window.confirm(`Remove ${stream.title} and add its title to ignore keywords?`)) {
+                          return onRemoveScheduledStream(stream.videoId);
                         }
                       }}
                       className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700/30 dark:hover:bg-gray-700/50 rounded-lg transition-colors border border-gray-300 dark:border-gray-600"
                       title="Remove scheduled stream"
                     >
                       Remove
-                    </button>
+                    </ActionButton>
                   </div>
                 </div>
               ))}
             </div>
             <div className="mt-2 text-xs text-gray-500 dark:text-gray-500">
-              Downloads will start automatically 5 minutes before the scheduled time.
+              Streams enter the download queue near their scheduled time. Downloads start when capacity is available.
             </div>
           </div>
         )}

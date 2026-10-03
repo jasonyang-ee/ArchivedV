@@ -1,83 +1,46 @@
-import React, { useState } from "react";
+import { useState } from "react";
+import ActionButton from "./ActionButton";
 
-function KeywordList({ keywords, onAddKeyword, onDeleteKeyword }) {
-  const [keywordInput, setKeywordInput] = useState("");
-
-  const handleAdd = async () => {
-    if (!keywordInput.trim()) return;
-    await onAddKeyword(keywordInput);
-    setKeywordInput("");
-  };
-
-  // Sort keywords alphabetically (case-insensitive)
-  const sortedKeywords = [...keywords].sort((a, b) => 
-    a.toLowerCase().localeCompare(b.toLowerCase())
-  );
-
+export default function KeywordList({ keywords, onAddKeyword, onDeleteKeyword, ignored = false }) {
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const label = ignored ? "Ignore keyword" : "Keyword";
+  async function handleAdd(event) {
+    event.preventDefault();
+    if (busy || !input.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      await onAddKeyword(input.trim());
+      setInput("");
+    } catch (error) {
+      setError(error.message || "Could not add keyword");
+    } finally { setBusy(false); }
+  }
+  const sorted = [...keywords].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
   return (
-    <div className="card">
-      <h2 className="text-xl font-semibold mb-2 text-gray-900 dark:text-gray-100">
-        Keywords
-      </h2>
+    <section className="card">
+      <h2 className="text-xl font-semibold mb-2">{ignored ? "Ignore Keywords" : "Keywords"}</h2>
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-        Videos matching any of these keywords will be downloaded
+        {ignored ? "Matching titles are excluded from downloads." : "Titles matching any keyword are downloaded. With no keywords, all videos match."}
       </p>
-
-      {/* Keyword List */}
-      <div className="space-y-1.5 mb-4 max-h-200 overflow-y-auto">
-        {sortedKeywords.length === 0 ? (
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            <p>No keywords added yet</p>
-            <p className="text-sm mt-2">Add keywords to filter streams</p>
+      <div className={`space-y-1.5 mb-4 overflow-y-auto ${ignored ? "max-h-100" : "max-h-200"}`}>
+        {sorted.length === 0 ? <p className="text-center py-8 text-gray-500 dark:text-gray-400">{ignored ? "No ignore keywords set" : "No keywords set; all videos match"}</p> : sorted.map((keyword) => (
+          <div key={keyword} className="flex items-start gap-2 p-2 bg-gray-50 dark:bg-[#333333] rounded-lg border border-gray-200 dark:border-[#444444]">
+            <span className="text-sm flex-1 min-w-0 wrap-anywhere">{keyword}</span>
+            <ActionButton onClick={() => onDeleteKeyword(keyword)} className="text-sm text-red-700 dark:text-red-300" aria-label={`Delete ${label.toLowerCase()}: ${keyword}`} pendingText="Deleting...">Delete</ActionButton>
           </div>
-        ) : (
-          sortedKeywords.map((keyword) => (
-            <div
-              key={keyword}
-              className="flex items-start gap-2 p-2 bg-gray-50 dark:bg-[#333333] rounded-lg border border-gray-200 dark:border-[#444444] hover:shadow-md transition-shadow"
-            >
-              <span className="text-sm text-gray-900 dark:text-gray-100 font-normal flex-1 wrap-break-word">
-                {keyword}
-              </span>
-              <button
-                onClick={() => onDeleteKeyword(keyword)}
-                className="p-0.5 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors shrink-0"
-                title="Delete keyword"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  />
-                </svg>
-              </button>
-            </div>
-          ))
-        )}
+        ))}
       </div>
-
-      {/* Add Keyword Form */}
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={keywordInput}
-          onChange={(e) => setKeywordInput(e.target.value)}
-          onKeyPress={(e) => e.key === "Enter" && handleAdd()}
-          placeholder="Enter Keyword"
-          className="input flex-1"
-        />
-        <button
-          onClick={handleAdd}
-          disabled={!keywordInput.trim()}
-          className="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Add
-        </button>
-      </div>
-    </div>
+      <form onSubmit={handleAdd}>
+        <label className="label" htmlFor={ignored ? "ignore-keyword" : "keyword"}>{label}</label>
+        <div className="flex gap-2">
+          <input id={ignored ? "ignore-keyword" : "keyword"} value={input} onChange={(event) => setInput(event.target.value)} disabled={busy} className="input flex-1 min-w-0" />
+          <button type="submit" disabled={busy || !input.trim()} className="btn btn-primary">{busy ? "Adding..." : "Add"}</button>
+        </div>
+        {error && <p role="alert" className="mt-2 text-sm text-red-700 dark:text-red-300">{error}</p>}
+      </form>
+    </section>
   );
 }
-
-export default KeywordList;

@@ -4,15 +4,16 @@ import axios from "axios";
 import { Parser, processors } from "xml2js";
 
 import db from "./database.js";
-import { autoMerge } from "./merger.js";
-import { isAuthSkipped, canUseCookies } from "./auth.js";
-import { sleep, jitter, normalizeError, sanitize, isValidYouTubeUrl, nowIso } from "./utils.js";
+import { autoMerge, isFolderBusy } from "./merger.js";
+import { isAuthSkipped } from "./auth.js";
+import { sleep, jitter, normalizeError, sanitize, isValidYouTubeUrl, nowIso, isSafeIdentifier, isSafeDownloadPath, downloadDirectory } from "./utils.js";
 import {
   status,
   activeDownloads,
   canStartAnotherDownload,
   getRetryQueueCounts,
   inspectDownloadFolder,
+  recordDownloadSuccess,
   upsertRetryJob,
   isScheduledStream,
   startYtDlp,
@@ -41,6 +42,7 @@ const xmlParser = new Parser({
 // Track feed 404 errors to reduce log spam - only log first occurrence
 // Map: channelId -> { firstSeenAt: Date, lastLoggedAt: Date }
 const feed404Cache = new Map();
+let stopping = false;
 
 function shouldLogFeed404(channelId) {
   const now = Date.now();
@@ -73,6 +75,7 @@ function shuffleArray(arr) {
 
 // Process scheduled streams: promote to retry queue when near their start time
 export async function processScheduledStreams() {
+  if (stopping) return;
   db.read();
   if (!db.data.scheduledStreams || db.data.scheduledStreams.length === 0) return;
 
@@ -80,11 +83,14 @@ export async function processScheduledStreams() {
   const promoted = [];
   const kept = [];
 
+  const channelIds = new Set(db.data.channels.map((channel) => channel.id));
+  const ignored = db.data.ignoreKeywords.map((keyword) => keyword.toLowerCase());
   for (const stream of db.data.scheduledStreams) {
+    if (!channelIds.has(stream.channelId) || ignored.some((keyword) => String(stream.title).toLowerCase().includes(keyword))) continue;
     const scheduledTime = new Date(stream.scheduledFor).getTime();
     const timeUntilStart = scheduledTime - now;
 
-    if (timeUntilStart <= SCHEDULED_STREAM_LEAD_TIME_MS) {
+    if (!Number.isFinite(scheduledTime) || timeUntilStart <= SCHEDULED_STREAM_LEAD_TIME_MS) {
       // Time to start checking — promote to retry queue
       promoted.push(stream);
     } else {
@@ -93,9 +99,6 @@ export async function processScheduledStreams() {
   }
 
   if (promoted.length > 0) {
-    db.data.scheduledStreams = kept;
-    db.write();
-
     for (const stream of promoted) {
       console.log(
         `[INFO] [Archived V] Promoting scheduled stream to download queue: "${stream.title}"`
@@ -117,6 +120,11 @@ export async function processScheduledStreams() {
       );
     }
   }
+  // Persist removal only after every promoted job is durable. A crash can leave
+  // duplicate identities across queues; idempotent upserts reconcile them.
+  db.read();
+  db.data.scheduledStreams = kept;
+  db.write();
 }
 
 // Headers for YouTube RSS feed requests.
@@ -135,6 +143,7 @@ async function fetchFeedWithRetry(url, channelLabel = "") {
     try {
       const res = await axios.get(url, {
         headers: FEED_REQUEST_HEADERS,
+        maxRedirects: 0,
         validateStatus: (s) => s >= 200 && s < 300,
       });
       return res.data;
@@ -164,7 +173,7 @@ let checkRunning = false;
 let checkPending = false;
 
 export async function processRetryQueue() {
-  if (retryQueueRunning) return;
+  if (stopping || retryQueueRunning) return;
   retryQueueRunning = true;
   try {
     db.read();
@@ -219,8 +228,15 @@ export async function processRetryQueue() {
       .sort((a, b) => new Date(a.nextAttemptAt).getTime() - new Date(b.nextAttemptAt).getTime());
 
     for (const job of due) {
+      db.read();
+      if (!isSafeIdentifier(job.channelId) || !isSafeIdentifier(job.videoId) ||
+          !db.data.channels.some((channel) => channel.id === job.channelId) || isAuthSkipped(job.videoId)) {
+        db.data.retryQueue = db.data.retryQueue.filter((entry) => entry.key !== job.key);
+        db.write();
+        continue;
+      }
       // Check ignore keywords - skip and remove if matches
-      if (ignoreKeywords.some((k) => job.title.toLowerCase().includes(k))) {
+      if (ignoreKeywords.some((k) => String(job.title || "").toLowerCase().includes(k))) {
         db.data.retryQueue = db.data.retryQueue.filter((j) => j.key !== job.key);
         db.write();
         console.log(`[INFO] [Archived V] Skipping retry for "${job.title}" - matches ignore keyword`);
@@ -248,8 +264,16 @@ export async function processRetryQueue() {
       }
 
       const downloadId = `${job.channelId}-${job.videoId}-${Date.now()}`;
-      const dir = job.dir || path.join(DOWNLOAD_DIR, job.username || job.channelId, sanitize(job.title || job.videoId));
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      let dir;
+      try {
+        dir = job.dir || downloadDirectory({ id: job.channelId, username: job.username }, job.videoId, job.title, job.createdAt, db.data.dateFormat);
+        if (!isSafeDownloadPath(dir)) throw new Error("Unsafe archive directory");
+        if (isFolderBusy(dir)) continue;
+        fs.mkdirSync(dir, { recursive: true });
+      } catch (error) {
+        upsertRetryJob(job, { lastError: error.message, nextAttemptAt: new Date(Date.now() + 60000).toISOString(), inProgress: false });
+        continue;
+      }
 
       const downloadInfo = {
         id: downloadId,
@@ -263,6 +287,10 @@ export async function processRetryQueue() {
         startTime: nowIso(),
       };
 
+      if (inspectDownloadFolder(dir).kind === "complete") {
+        recordDownloadSuccess(dir, downloadInfo);
+        continue;
+      }
       // Mark job as in progress and push current download
       job.inProgress = true;
       job.lastAttemptAt = nowIso();
@@ -278,7 +306,15 @@ export async function processRetryQueue() {
       db.write();
 
       const link = job.videoLink || `https://www.youtube.com/watch?v=${job.videoId}`;
-      startYtDlp(downloadId, downloadInfo, dir, link);
+      try {
+        startYtDlp(downloadId, downloadInfo, dir, link);
+      } catch (error) {
+        status.currentDownloads = status.currentDownloads.filter((item) => item.id !== downloadId);
+        db.read();
+        db.data.currentDownloads = db.data.currentDownloads.filter((item) => item.id !== downloadId);
+        db.write();
+        upsertRetryJob(job, { lastError: error.message, inProgress: false, nextAttemptAt: new Date(Date.now() + 60000).toISOString() });
+      }
     }
   } finally {
     retryQueueRunning = false;
@@ -286,6 +322,7 @@ export async function processRetryQueue() {
 }
 
 export async function checkUpdates() {
+  if (stopping) return;
   if (checkRunning) {
     checkPending = true;
     return;
@@ -332,12 +369,11 @@ export async function checkUpdates() {
     }
 
     const channels = db.data.channels;
-    const keywords = db.data.keywords.map((k) => k.toLowerCase());
-    const ignoreKeywords = (db.data.ignoreKeywords || []).map((k) => k.toLowerCase());
 
     // Kick retry queue and process scheduled streams first so failed/partial work gets priority.
     await processScheduledStreams();
     await processRetryQueue();
+    if (stopping) return;
 
     let feedSuccessCount = 0;
     let feedFailCount = 0;
@@ -359,6 +395,7 @@ export async function checkUpdates() {
         if (i > 0 && i % FEED_BATCH_SIZE === 0) {
           await sleep(jitter(FEED_BATCH_PAUSE_MS));
         }
+        if (stopping) return;
 
         // Validate URL before making request to prevent SSRF
         if (!isValidYouTubeUrl(ch.link)) {
@@ -374,7 +411,13 @@ export async function checkUpdates() {
         currentDelay = FEED_CHANNEL_DELAY_MS;
 
         const result = await xmlParser.parseStringPromise(xml);
-        const entries = result.feed.entry || [];
+        if (stopping) return;
+        const entries = result?.feed?.entry || [];
+        db.read();
+        // Requests can remove channels or change filters while the feed fetch is pending.
+        if (!db.data.channels.some((channel) => channel.id === ch.id)) continue;
+        const keywords = db.data.keywords.map((keyword) => keyword.toLowerCase());
+        const ignoreKeywords = db.data.ignoreKeywords.map((keyword) => keyword.toLowerCase());
 
         // Extract actual channel name from RSS feed
         let channelName = ch.username; // fallback to username
@@ -397,36 +440,17 @@ export async function checkUpdates() {
           }
         }
 
-        const channelDir = path.join(DOWNLOAD_DIR, ch.username);
+        if (!isSafeIdentifier(ch.username || ch.id)) continue;
+        const channelDir = path.join(DOWNLOAD_DIR, ch.username || ch.id);
+        if (!isSafeDownloadPath(channelDir)) continue;
         if (!fs.existsSync(channelDir)) fs.mkdirSync(channelDir, { recursive: true });
 
         for (const entry of entries) {
-          const videoId = entry.videoId ? entry.videoId[0] : entry["yt:videoId"][0];
-          const title = entry.title[0];
-          const linkObj = entry.link.find((l) => l.$ && l.$.href);
-          const videoLink = linkObj ? linkObj.$.href : ch.link;
-
-          // Extract upload date from RSS feed (published field)
-          let uploadDate = new Date();
-          if (entry.published && entry.published[0]) {
-            uploadDate = new Date(entry.published[0]);
-          }
-
-          // Format date based on user setting
-          const year = uploadDate.getFullYear();
-          const month = String(uploadDate.getMonth() + 1).padStart(2, "0");
-          const day = String(uploadDate.getDate()).padStart(2, "0");
-
-          const dateFormat = db.data.dateFormat || "YYYY-MM-DD";
-          let datePrefix;
-          if (dateFormat === "MM-DD-YYYY") {
-            datePrefix = `[${month}-${day}-${year}] `;
-          } else {
-            datePrefix = `[${year}-${month}-${day}] `;
-          }
-
-          const folderName = `${datePrefix}${sanitize(title)}`;
-          let dir = path.join(channelDir, folderName);
+          const videoId = entry.videoId?.[0];
+          const title = entry.title?.[0];
+          if (!isSafeIdentifier(videoId) || typeof title !== "string" || !title.trim()) continue;
+          const videoLink = `https://www.youtube.com/watch?v=${videoId}`;
+          let dir = downloadDirectory(ch, videoId, title, entry.published?.[0], db.data.dateFormat);
 
           // Check ignore keywords - exclude if any ignore keyword is found
           const shouldIgnore = ignoreKeywords.some((k) => title.toLowerCase().includes(k));
@@ -442,73 +466,28 @@ export async function checkUpdates() {
             }
           }
 
-          const sanitizedTitle = sanitize(title);
-          let alreadyDownloaded = false;
-          let isCurrentlyDownloading = false;
-          let resumeDir = null;
+          if (isAuthSkipped(videoId) || isScheduledStream(ch.id, videoId)) continue;
+          if ([...activeDownloads.values()].some((download) => download.downloadInfo.channel === ch.id && download.downloadInfo.videoId === videoId)) continue;
 
-          // If cookies aren't configured and we've already seen an auth-required failure for this video,
-          // skip it to avoid repeatedly attempting it every scan.
-          if (!canUseCookies() && isAuthSkipped(videoId)) {
-            continue;
-          }
-
-          // Skip if already tracked as a scheduled stream
-          if (isScheduledStream(ch.id, videoId)) {
-            continue;
-          }
-
-          // CHECK 1: Is this video currently being downloaded by an active process?
-          for (const [downloadId, download] of activeDownloads.entries()) {
-            if (
-              download.downloadInfo.channel === ch.id &&
-              download.downloadInfo.videoId === videoId
-            ) {
-              isCurrentlyDownloading = true;
-              break;
+          // Stable identity wins over mutable titles and date-format preferences.
+          const queued = db.data.retryQueue.find((job) => job.channelId === ch.id && job.videoId === videoId);
+          const saved = db.data.history.find((item) => item.channelId === ch.id && item.videoId === videoId && item.status !== "skipped");
+          if (queued?.dir) dir = queued.dir;
+          else if (saved?.dir && fs.existsSync(saved.dir)) dir = saved.dir;
+          else {
+            const folders = fs.readdirSync(channelDir, { withFileTypes: true }).filter((entry) => entry.isDirectory());
+            const identified = folders.find((entry) => entry.name.endsWith(` [${videoId}]`));
+            if (identified) dir = path.join(channelDir, identified.name);
+            else if (saved) {
+              // Legacy folders have no ID. Reuse only when saved history identifies
+              // this title uniquely; never conflate unrelated same-title streams.
+              const sameTitle = db.data.history.filter((item) => item.channelId === ch.id && item.title === title);
+              const legacy = folders.filter((entry) => entry.name.replace(/^\[\d{2,4}-\d{2}-\d{2,4}\]\s*/, "") === sanitize(title));
+              if (sameTitle.length === 1 && legacy.length === 1) dir = path.join(channelDir, legacy[0].name);
             }
           }
-
-          if (isCurrentlyDownloading) continue;
-
-          // CHECK 2: Does the folder exist with video files (completed or partial)?
-          try {
-            const channelFolders = fs.readdirSync(channelDir, { withFileTypes: true });
-            for (const folder of channelFolders) {
-              if (folder.isDirectory()) {
-                // Match both YYYY-MM-DD and MM-DD-YYYY formats
-                const folderTitle = folder.name.replace(/^\[\d{2,4}-\d{2}-\d{2,4}\]\s*/, "");
-                if (folderTitle === sanitizedTitle) {
-                  const folderPath = path.join(channelDir, folder.name);
-                  const state = inspectDownloadFolder(folderPath);
-
-                  if (state.kind === "complete") {
-                    alreadyDownloaded = true;
-                    break;
-                  }
-
-                  if (state.kind === "incomplete" || state.kind === "metadata") {
-                    // Incomplete or metadata-only folders should be retried/resumed, not treated as complete.
-                    resumeDir = folderPath;
-                    break;
-                  }
-
-                  if (state.kind === "empty") {
-                    console.log(`[INFO] [Archived V] Removing empty folder: ${folderPath}`);
-                    fs.rmSync(folderPath, { recursive: true, force: true });
-                  }
-                }
-              }
-            }
-          } catch (e) {
-            if (e.code !== "ENOENT") throw e;
-          }
-
-          if (alreadyDownloaded) continue;
-
-          if (resumeDir) {
-            dir = resumeDir;
-          }
+          if (!isSafeDownloadPath(dir)) continue;
+          if (inspectDownloadFolder(dir).kind === "complete" || isFolderBusy(dir)) continue;
 
           if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true });
@@ -569,10 +548,12 @@ export async function checkUpdates() {
 
     let total = 0;
     for (const ch of db.data.channels) {
-      const channelDir = path.join(DOWNLOAD_DIR, ch.username);
+      if (!isSafeIdentifier(ch.username || ch.id)) continue;
+      const channelDir = path.join(DOWNLOAD_DIR, ch.username || ch.id);
+      if (!isSafeDownloadPath(channelDir)) continue;
       if (fs.existsSync(channelDir)) {
         const items = fs.readdirSync(channelDir, { withFileTypes: true });
-        total += items.filter((d) => d.isDirectory()).length;
+        total += items.filter((entry) => entry.isDirectory() && !isFolderBusy(path.join(channelDir, entry.name)) && inspectDownloadFolder(path.join(channelDir, entry.name)).kind === "complete").length;
       }
     }
     status.downloadedCount = total;
@@ -592,24 +573,29 @@ export async function checkUpdates() {
 
 export function startScheduler() {
   // Check for new streams every 10 minutes
-  setInterval(() => {
+  const feedTimer = setInterval(() => {
     console.log(`[INFO] [Archived V] Scheduler Checking for New Streams`);
     checkUpdates().catch((err) => console.error("[ERROR] [Archived V] Cron error:", err));
   }, 10 * 60 * 1000);
 
   // Start retry queue scheduler - every minute (also checks scheduled streams for promotion)
-  setInterval(() => {
+  const retryTimer = setInterval(() => {
     processScheduledStreams().catch((err) => console.error("[ERROR] [Archived V] Scheduled streams error:", err));
     processRetryQueue().catch((err) => console.error("[ERROR] [Archived V] Retry queue error:", err));
   }, 60 * 1000);
+  return () => {
+    stopping = true;
+    checkPending = false;
+    clearInterval(feedTimer);
+    clearInterval(retryTimer);
+  };
 }
 
 export function runInitialCheck() {
   console.log("[INFO] [Archived V] Initial Checking for New Streams");
-  checkUpdates().catch((err) => console.error("[ERROR] [Archived V] Startup refresh error:", err));
-
-  // Run auto merge on startup
-  autoMerge();
+  autoMerge(null, () => {
+    checkUpdates().catch((err) => console.error("[ERROR] [Archived V] Startup refresh error:", err));
+  });
 }
 
 export default {

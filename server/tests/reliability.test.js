@@ -9,12 +9,14 @@ import test, { beforeEach } from "node:test";
 import axios from "axios";
 import express from "express";
 import db from "../database.js";
-import { DB_PATH, DOWNLOAD_DIR } from "../config.js";
-import { activeDownloads, status, startYtDlp, upsertRetryJob } from "../downloader.js";
-import { checkUpdates } from "../scheduler.js";
-import { mergeInFolder } from "../merger.js";
+import { DB_PATH, DOWNLOAD_DIR, YTDLP_COOKIES_PATH } from "../config.js";
+import { activeDownloads, status, startYtDlp, upsertRetryJob, cleanupRetryQueue, recoverStaleDownloads, startDownloadWatchdog } from "../downloader.js";
+import { checkUpdates, processRetryQueue, processScheduledStreams } from "../scheduler.js";
+import { autoMerge, mergeInFolder, downloadingFolders } from "../merger.js";
 import router from "../routes.js";
+import { clearAuthSkipCache, markAuthSkipped } from "../auth.js";
 import { parseYtDlpFlags } from "../ytdlpFlags.js";
+import { downloadDirectory, isSafeDownloadPath } from "../utils.js";
 
 beforeEach(() => {
   db.data = {
@@ -23,6 +25,8 @@ beforeEach(() => {
   };
   db.write();
   activeDownloads.clear();
+  downloadingFolders.clear();
+  clearAuthSkipCache();
   status.currentDownloads = [];
 });
 
@@ -48,6 +52,7 @@ function beginDownload(t) {
   const processes = fakeSpawn(t);
   const info = { id: "channel-video-123", channel: "channel", videoId: "video", title: "Test" };
   const dir = fs.mkdtempSync(path.join(DOWNLOAD_DIR, "lifecycle-"));
+  db.data.channels = [{ id: "channel", username: "channel" }];
   db.data.currentDownloads = [info];
   db.write();
   status.currentDownloads = [info];
@@ -75,11 +80,41 @@ test("failed database replacement leaves previous JSON intact", (t) => {
   assert.deepEqual(fs.readdirSync(path.dirname(DB_PATH)), ["db.json"]);
 });
 
-test("invalid JSON retains the documented reset behavior", () => {
+test("invalid JSON is backed up exactly before resetting", () => {
   fs.writeFileSync(DB_PATH, "{invalid");
   db.read();
   assert.deepEqual(db.data.channels, []);
   assert.deepEqual(JSON.parse(fs.readFileSync(DB_PATH, "utf8")), db.data);
+  const backup = fs.readdirSync(path.dirname(DB_PATH)).find((file) => file.startsWith("db.json.corrupt-"));
+  assert.equal(fs.readFileSync(path.join(path.dirname(DB_PATH), backup), "utf8"), "{invalid");
+});
+
+test("one unreadable directory does not stop recovery of other folders", async (t) => {
+  const unreadable = path.join(DOWNLOAD_DIR, "unreadable");
+  const healthy = path.join(DOWNLOAD_DIR, "healthy");
+  fs.mkdirSync(healthy);
+  const read = fs.readdirSync;
+  let visitedHealthy = false;
+  t.mock.method(fs, "readdirSync", (folder, ...args) => {
+    if (folder === DOWNLOAD_DIR) return ["unreadable", "healthy"].map((name) => ({ name, isDirectory: () => true }));
+    if (folder === unreadable) throw Object.assign(new Error("read denied"), { code: "EACCES" });
+    if (folder === healthy) visitedHealthy = true;
+    return read(folder, ...args);
+  });
+  await new Promise((resolve) => autoMerge(null, resolve));
+  assert.equal(visitedHealthy, true);
+});
+
+test("archive paths reject symlinks and bound long Unicode names without losing identity", () => {
+  const videoId = "v".repeat(128);
+  const dir = downloadDirectory({ id: "boundary" }, videoId, "長".repeat(200), "2026-10-03");
+  assert.ok(Buffer.byteLength(path.basename(dir)) <= 255);
+  assert.ok(dir.endsWith(`[${videoId}]`));
+  fs.mkdirSync(dir, { recursive: true });
+  assert.equal(isSafeDownloadPath(dir), true);
+  const link = path.join(DOWNLOAD_DIR, "linked");
+  fs.symlinkSync(path.dirname(DOWNLOAD_DIR), link, "dir");
+  assert.equal(isSafeDownloadPath(path.join(link, "escaped")), false);
 });
 
 test("retry metadata updates preserve attempts, deadline and creation time", () => {
@@ -242,4 +277,276 @@ test("malformed keyword and channel bodies are rejected without poisoning config
   assert.deepEqual(db.data.keywords, []);
   assert.deepEqual(db.data.ignoreKeywords, []);
   assert.deepEqual(db.data.channels, []);
+});
+
+test("exit zero without a saved video stays retryable", (t) => {
+  const { proc } = beginDownload(t);
+  proc.emit("close", 0);
+  db.read();
+  assert.deepEqual(db.data.history, []);
+  assert.equal(db.data.retryQueue.length, 1);
+});
+
+test("403 termination without media is not a successful archive", (t) => {
+  const { proc } = beginDownload(t);
+  proc.stderr.emit("data", Buffer.from("Got error: HTTP Error 403. Retrying fragment\n".repeat(100)));
+  proc.emit("close", null);
+  db.read();
+  assert.deepEqual(db.data.history, []);
+  assert.equal(db.data.retryQueue.length, 1);
+});
+
+test("failed merge never publishes a final filename or discards source fragments", (t) => {
+  const processes = fakeSpawn(t);
+  const dir = fs.mkdtempSync(path.join(DOWNLOAD_DIR, "failed-merge-"));
+  fs.writeFileSync(path.join(dir, "Test.f137.mp4"), Buffer.alloc(2048));
+  fs.writeFileSync(path.join(dir, "Test.f140.m4a"), Buffer.alloc(2048));
+  let callbacks = 0;
+  mergeInFolder(dir, () => callbacks++);
+  const args = childProcess.spawn.mock.calls[0].arguments[1];
+  const output = args.at(-1);
+  fs.writeFileSync(output, Buffer.alloc(2048));
+  processes[0].emit("close", 1);
+  assert.equal(callbacks, 1);
+  assert.equal(fs.existsSync(path.join(dir, "Test.mp4")), false);
+  assert.equal(fs.existsSync(path.join(dir, "Test.f137.mp4")), true);
+  assert.equal(fs.existsSync(path.join(dir, "Test.f140.m4a")), true);
+});
+
+test("concurrent recovery scans share one merge", (t) => {
+  const processes = fakeSpawn(t);
+  const dir = fs.mkdtempSync(path.join(DOWNLOAD_DIR, "shared-merge-"));
+  fs.writeFileSync(path.join(dir, "Test.f137.mp4"), Buffer.alloc(2048));
+  fs.writeFileSync(path.join(dir, "Test.f140.m4a"), Buffer.alloc(2048));
+  let callbacks = 0;
+  mergeInFolder(dir, () => callbacks++);
+  mergeInFolder(dir, () => callbacks++);
+  assert.equal(processes.length, 1);
+  processes[0].emit("close", 1);
+  assert.equal(callbacks, 2);
+});
+
+test("channel URL parsing rejects path traversal and foreign hosts", async (t) => {
+  const base = await serve(t);
+  t.mock.method(axios, "get", async () => ({ data: "<feed/>" }));
+  for (const link of [
+    "https://www.youtube.com/feeds/videos.xml?channel_id=../../outside",
+    "https://evil.example/channel/UCtest", "https://www.youtube.com/watch?v=video",
+    "https://www.youtube.com:8443/channel/UCtest",
+  ]) {
+    const response = await fetch(`${base}/api/channels`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ link }),
+    });
+    assert.equal(response.status, 400, link);
+  }
+  assert.equal(axios.get.mock.callCount(), 0);
+});
+
+test("custom flags cannot change executables, destinations or add URLs", () => {
+  for (const flags of ["--ffmpeg-location /tmp/program", "--output /tmp/file", "--paths /tmp", "--use-postprocessor Exec:cmd=whoami", "--print-to-file title /tmp/file", "--downloader /tmp/program", "https://example.com/file", "--simulate", "--no-continue"]) {
+    assert.throws(() => parseYtDlpFlags(flags), Error, flags);
+  }
+});
+
+test("cookie uploads reject non-Netscape input before replacing credentials", async (t) => {
+  const base = await serve(t);
+  const response = await fetch(`${base}/api/auth/cookies`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cookiesText: "not a cookie file" }),
+  });
+  assert.equal(response.status, 400);
+  db.read();
+  assert.equal(db.data.auth.useCookies, false);
+});
+
+test("channel deletion removes queued and scheduled work", async (t) => {
+  const base = await serve(t);
+  db.data.channels = [{ id: "channel", username: "channel" }];
+  db.data.retryQueue = [{ channelId: "channel", videoId: "video", key: "channel-video" }];
+  db.data.scheduledStreams = [{ channelId: "channel", videoId: "future" }];
+  db.write();
+  assert.equal((await fetch(`${base}/api/channels/channel`, { method: "DELETE" })).status, 200);
+  db.read();
+  assert.deepEqual(db.data.retryQueue, []);
+  assert.deepEqual(db.data.scheduledStreams, []);
+});
+
+
+test("failed yt-dlp output is recovered before completion, with ownership held through ffmpeg", (t) => {
+  const { proc, info, dir } = beginDownload(t);
+  fs.writeFileSync(path.join(dir, "Test.f137.mp4"), Buffer.alloc(2048));
+  fs.writeFileSync(path.join(dir, "Test.f140.m4a"), Buffer.alloc(2048));
+  proc.emit("close", 1);
+  assert.equal(activeDownloads.size, 1);
+  assert.equal(db.data.history.length, 0);
+  assert.equal(startYtDlp("duplicate", info, dir, "ignored"), proc);
+  const call = childProcess.spawn.mock.calls[1];
+  fs.writeFileSync(call.arguments[1].at(-1), Buffer.alloc(1024 * 1024 + 1));
+  call.result.emit("close", 0);
+  db.read();
+  assert.equal(db.data.history.length, 1);
+  assert.equal(db.data.history[0].dir, dir);
+  assert.deepEqual(db.data.retryQueue, []);
+  assert.equal(activeDownloads.size, 0);
+  assert.deepEqual(fs.readdirSync(dir), ["Test.mp4"]);
+});
+
+test("startup merge cannot touch an active writer's fragments", (t) => {
+  const { dir } = beginDownload(t);
+  fs.writeFileSync(path.join(dir, "Test.f137.mp4"), Buffer.alloc(512));
+  fs.writeFileSync(path.join(dir, "Test.f140.m4a"), Buffer.alloc(512));
+  mergeInFolder(dir);
+  assert.equal(childProcess.spawn.mock.callCount(), 1);
+  assert.equal(fs.readdirSync(dir).length, 2);
+});
+
+test("same-title streams retain distinct video identities and dates", async (t) => {
+  const processes = fakeSpawn(t);
+  db.data.channels = [{ id: "same-title", username: "same-title", link: "https://www.youtube.com/feeds/videos.xml?channel_id=same-title" }];
+  db.write();
+  const old = path.join(DOWNLOAD_DIR, "same-title", "[2026-01-01] Singing");
+  fs.mkdirSync(old, { recursive: true });
+  fs.writeFileSync(path.join(old, "Singing.mp4"), Buffer.alloc(1024 * 1024 + 1));
+  t.mock.method(axios, "get", async () => ({ data: '<feed><entry><videoId>first</videoId><title>Singing</title><published>2026-02-01T12:00:00Z</published></entry><entry><videoId>second</videoId><title>Singing</title><published>2026-02-01T12:00:00Z</published></entry></feed>' }));
+  await checkUpdates();
+  assert.equal(processes.length, 2);
+  const dirs = [...activeDownloads.values()].map((download) => download.dir);
+  assert.equal(new Set(dirs).size, 2);
+  assert.ok(dirs.some((dir) => dir.endsWith("[first]")));
+  assert.ok(dirs.some((dir) => dir.endsWith("[second]")));
+});
+
+test("channel removed during feed fetch cannot enqueue new work", async (t) => {
+  const processes = fakeSpawn(t);
+  db.data.channels = [{ id: "channel", username: "channel", link: "https://www.youtube.com/feeds/videos.xml?channel_id=channel" }];
+  db.write();
+  t.mock.method(axios, "get", async () => {
+    db.read();
+    db.data.channels = [];
+    db.write();
+    return { data: '<feed><entry><videoId>video</videoId><title>Test</title></entry></feed>' };
+  });
+  await checkUpdates();
+  db.read();
+  assert.deepEqual(db.data.retryQueue, []);
+  assert.equal(processes.length, 0);
+});
+
+test("restart resets inProgress even when no queue entries are removed", () => {
+  db.data.channels = [{ id: "channel", username: "channel" }];
+  db.write();
+  upsertRetryJob({ channelId: "channel", videoId: "video", title: "Test" }, { inProgress: true });
+  cleanupRetryQueue();
+  db.read();
+  assert.equal(db.data.retryQueue.length, 1);
+  assert.equal(db.data.retryQueue[0].inProgress, false);
+});
+
+test("restart preserves hyphenated video IDs and the original directory", () => {
+  const dir = path.join(DOWNLOAD_DIR, "channel", "[2026-01-01] Legacy title");
+  db.data.currentDownloads = [{ id: "channel-with-dashes-video-with-dashes-123", channel: "channel-with-dashes", videoId: "video-with-dashes", dir, title: "Legacy title" }];
+  db.write();
+  recoverStaleDownloads();
+  db.read();
+  assert.equal(db.data.retryQueue[0].videoId, "video-with-dashes");
+  assert.equal(db.data.retryQueue[0].dir, dir);
+  assert.deepEqual(db.data.currentDownloads, []);
+});
+
+test("scheduled promotion preserves paths and drops removed channels", async () => {
+  db.data.channels = [{ id: "channel", username: "channel" }];
+  db.data.scheduledStreams = [
+    { channelId: "channel", videoId: "video", dir: path.join(DOWNLOAD_DIR, "dated"), scheduledFor: "2000-01-01T00:00:00Z" },
+    { channelId: "removed", videoId: "other", scheduledFor: "2000-01-01T00:00:00Z" },
+  ];
+  const dir = db.data.scheduledStreams[0].dir;
+  db.write();
+  await processScheduledStreams();
+  db.read();
+  assert.deepEqual(db.data.scheduledStreams, []);
+  assert.equal(db.data.retryQueue.length, 1);
+  assert.equal(db.data.retryQueue[0].dir, dir);
+});
+
+test("auth cooldown blocks queued attempts even when cookies are enabled", async (t) => {
+  const processes = fakeSpawn(t);
+  db.data.channels = [{ id: "channel", username: "channel" }];
+  db.data.auth.useCookies = true;
+  db.write();
+  upsertRetryJob({ channelId: "channel", videoId: "video", title: "Test" });
+  markAuthSkipped("video");
+  await processRetryQueue();
+  assert.equal(processes.length, 0);
+});
+
+test("malformed database shapes preserve the original JSON", () => {
+  for (const text of ["null", "[]", '{"channels":{}}', '{"auth":true}']) {
+    fs.writeFileSync(DB_PATH, text);
+    assert.throws(() => db.read(), /original file preserved/);
+    assert.equal(fs.readFileSync(DB_PATH, "utf8"), text);
+  }
+});
+
+test("valid cookie replacement is atomic and private", async (t) => {
+  const base = await serve(t);
+  const cookiesText = "# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t0\tSESSION\ttest-value\n";
+  const upload = () => fetch(`${base}/api/auth/cookies`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cookiesText }) });
+  assert.equal((await upload()).status, 200);
+  assert.equal(fs.statSync(YTDLP_COOKIES_PATH).mode & 0o777, 0o600);
+  t.mock.method(fs, "renameSync", () => { throw new Error("replacement denied"); });
+  assert.equal((await upload()).status, 500);
+  assert.equal(fs.readFileSync(YTDLP_COOKIES_PATH, "utf8"), cookiesText);
+});
+
+test("watchdog preserves quiet processes while media files are growing", (t) => {
+  const { proc, info, dir } = beginDownload(t);
+  const tracking = activeDownloads.get(info.id);
+  tracking.startedAt = Date.now() - 3 * 60 * 60 * 1000;
+  tracking.lastOutputAt = tracking.startedAt;
+  fs.writeFileSync(path.join(dir, "Test.f137.mp4"), Buffer.alloc(2048));
+  let tick;
+  t.mock.method(globalThis, "setInterval", (callback) => { tick = callback; return {}; });
+  let signals = 0;
+  proc.kill = () => { signals++; return true; };
+  startDownloadWatchdog();
+  tick();
+  assert.equal(signals, 0);
+});
+
+
+test("recovered complete queue entries reconcile history without another capture", async (t) => {
+  const processes = fakeSpawn(t);
+  const dir = fs.mkdtempSync(path.join(DOWNLOAD_DIR, "recovered-"));
+  fs.writeFileSync(path.join(dir, "Test.mp4"), Buffer.alloc(1024 * 1024 + 1));
+  db.data.channels = [{ id: "channel", username: "channel" }];
+  db.write();
+  upsertRetryJob({ channelId: "channel", videoId: "video", title: "Test", dir });
+  await processRetryQueue();
+  db.read();
+  assert.equal(processes.length, 0);
+  assert.equal(db.data.history.length, 1);
+  assert.deepEqual(db.data.retryQueue, []);
+});
+
+test("removing a scheduled stream prevents RSS rediscovery", async (t) => {
+  const processes = fakeSpawn(t);
+  const base = await serve(t);
+  db.data.channels = [{ id: "channel", username: "channel", link: "https://www.youtube.com/feeds/videos.xml?channel_id=channel" }];
+  db.data.scheduledStreams = [{ channelId: "channel", videoId: "video", title: "Removed show" }];
+  db.write();
+  assert.equal((await fetch(`${base}/api/scheduled-streams/video`, { method: "DELETE" })).status, 200);
+  t.mock.method(axios, "get", async () => ({ data: '<feed><entry><videoId>video</videoId><title>Removed show</title></entry></feed>' }));
+  await checkUpdates();
+  db.read();
+  assert.deepEqual(db.data.ignoreKeywords, ["Removed show"]);
+  assert.deepEqual(db.data.retryQueue, []);
+  assert.equal(processes.length, 0);
+});
+
+test("removing an active channel prevents failure from recreating its retry", async (t) => {
+  const { proc } = beginDownload(t);
+  const base = await serve(t);
+  await fetch(`${base}/api/channels/channel`, { method: "DELETE" });
+  proc.emit("close", 1);
+  db.read();
+  assert.deepEqual(db.data.retryQueue, []);
 });

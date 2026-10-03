@@ -74,7 +74,7 @@ services:
 
 ## Web Interface
 
-Access the web interface at `http://<host_ip>:3000`
+Access the web interface at `http://<host_ip>:3000`. The application has no built-in user login: protect the UI and `/api` with an authenticated reverse proxy before exposing them outside a trusted network. See [deployment security](.github/SECURITY.md).
 
 
 
@@ -83,14 +83,14 @@ Access the web interface at `http://<host_ip>:3000`
 Bind mounts to preserve data:
 
 - **Configurations**: `/app/data/db.json`
-- **Downloaded Videos**: `/app/download/<channel_username>/[DateTime] <video_title>/`
+- **Downloaded Videos**: `/app/download/<channel_username>/[Date] <video_title> [video_id]/`
 - **Cookies (optional)**: `/app/data/youtube_cookies.txt`
 
 
 
 ## Scheduling
 
-A cron job runs every 10 minutes to check for new live streams.
+A server timer runs every 10 minutes to check for new live streams.
 
 
 
@@ -111,7 +111,7 @@ Change to the user ID of your host system if necessary. You can do this by modif
 
 ## Custom YT-DLP Options
 
-You can append custom `yt-dlp` options in the web interface, the same way as you would run `yt-dlp` from the command line.
+The web interface accepts supported format, subtitle, metadata and speed options, such as `--format`, `--sub-langs`, `--embed-subs`, and `--limit-rate 2M`. Executable overrides, output paths, extra URLs, configuration files and options that skip saving are rejected. The complete supported set is in `server/ytdlpFlags.js`.
 
 Refer to the [yt-dlp documentation](https://github.com/yt-dlp/yt-dlp?tab=readme-ov-file#usage-and-options) for available options.
 
@@ -130,7 +130,7 @@ Using custom options may affect the download behavior. Use with caution.
 	```
 
 - Axios need ipv4 to work properly. Force ipv4 dns resolution by adding the following to your docker compose file:
-  
+
 	> Docker Compose Example
 	```yaml
 	sysctls:
@@ -140,4 +140,8 @@ Using custom options may affect the download behavior. Use with caution.
 
 ## Contribute
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and contribution guidelines.
+See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for development setup and contribution guidelines.
+
+## System specification
+
+[SPEC.md](SPEC.md) documents module ownership, API and database contracts, download recovery, UI conventions, operational checks, and the requirements for future expansion.

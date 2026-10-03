@@ -6,18 +6,20 @@ import rateLimit from "express-rate-limit";
 import { fileURLToPath } from "url";
 import { Parser, processors } from "xml2js";
 import db, { buildDownloadTitleMap, resolveHistoryChannel } from "./database.js";
-import { clearAuthSkipCache } from "./auth.js";
-import { isValidYouTubeUrl } from "./utils.js";
+import { clearAuthSkipCache, validateCookies, saveCookies } from "./auth.js";
+import { isValidYouTubeUrl, isSafeIdentifier } from "./utils.js";
 import { parseYtDlpFlags } from "./ytdlpFlags.js";
 import {
   status,
   activeDownloads,
   safeCleanupDirectory,
+  stopDownload,
+  getRetryQueueCounts,
 } from "./downloader.js";
 import { checkUpdates } from "./scheduler.js";
 import {
   AUTH_RATELIMIT_MAX,
-  DOWNLOAD_DIR,
+  AXIOS_TIMEOUT_MS,
   STATIC_RATELIMIT_MAX,
   YTDLP_COOKIES_PATH,
 } from "./config.js";
@@ -116,13 +118,11 @@ router.put("/api/auth/cookies", authFsLimiter, (req, res) => {
     return res.status(413).json({ error: "cookiesText too large" });
   }
 
+  try { validateCookies(cookiesText); } catch (error) {
+    return res.status(400).json({ error: error.message });
+  }
   try {
-    const dir = path.dirname(YTDLP_COOKIES_PATH);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(YTDLP_COOKIES_PATH, cookiesText, { encoding: "utf8" });
-    try {
-      fs.chmodSync(YTDLP_COOKIES_PATH, 0o600);
-    } catch {}
+    saveCookies(cookiesText);
 
     db.read();
     if (!db.data.auth) db.data.auth = { useCookies: false };
@@ -177,7 +177,7 @@ router.post("/api/ytdlp-flags", (req, res) => {
 });
 
 // API: Add channel
-router.post("/api/channels", async (req, res) => {
+router.post("/api/channels", authFsLimiter, async (req, res) => {
   let { link } = req.body || {};
   if (typeof link !== "string" || !link.trim()) {
     return res.status(400).json({ error: "A non-empty channel link is required" });
@@ -186,81 +186,32 @@ router.post("/api/channels", async (req, res) => {
   // Trim whitespace
   link = link.trim();
 
-  let id, xmlLink, username;
-
-  // Handle plain username input (with or without @)
-  // Match: @username, username (no spaces, no special URL characters)
-  const plainHandleMatch = link.match(/^@?([a-zA-Z0-9_-]+)$/);
-  if (plainHandleMatch) {
-    username = plainHandleMatch[1];
-
-    // Sanitize username to prevent URL manipulation
-    // Only allow alphanumeric, underscore, and hyphen
-    if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
-      return res.status(400).json({ error: "Invalid username format" });
-    }
-
-    const aboutUrl = `https://www.youtube.com/@${username}/about`;
-    if (!isValidYouTubeUrl(aboutUrl)) {
-      return res.status(400).json({ error: "Invalid YouTube URL" });
-    }
-    try {
-      const html = (await axios.get(aboutUrl)).data;
-      const canonMatch = html.match(
-        /<link rel="canonical" href="https:\/\/www\.youtube\.com\/channel\/([^\"]+)"/
-      );
-      if (!canonMatch)
-        return res.status(400).json({ error: "Unable to resolve handle to channel ID" });
-      id = canonMatch[1];
-    } catch {
-      return res.status(400).json({ error: "Failed to fetch channel page" });
-    }
-    xmlLink = `https://www.youtube.com/feeds/videos.xml?channel_id=${id}`;
-  }
-  // Handle YouTube handle URLs (/@username)
-  else if (link.match(/youtube\.com\/@([^\/\?]+)/)) {
-    const handleMatch = link.match(/youtube\.com\/@([^\/\?]+)/);
+  let id, username;
+  const handleMatch = link.match(/^@?([A-Za-z0-9_-]+)$/);
+  if (handleMatch) {
     username = handleMatch[1];
-
-    // Sanitize username to prevent URL manipulation
-    // Only allow alphanumeric, underscore, and hyphen
-    if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
-      return res.status(400).json({ error: "Invalid username format" });
-    }
-
-    const aboutUrl = `https://www.youtube.com/@${username}/about`;
-    if (!isValidYouTubeUrl(aboutUrl)) {
-      return res.status(400).json({ error: "Invalid YouTube URL" });
-    }
+  } else {
+    if (!isValidYouTubeUrl(link)) return res.status(400).json({ error: "Invalid YouTube channel URL" });
+    const url = new URL(link);
+    const handle = url.pathname.match(/^\/@([A-Za-z0-9_-]+)(?:\/(?:about|videos|streams))?\/?$/);
+    const channel = url.pathname.match(/^\/channel\/([A-Za-z0-9_-]+)(?:\/(?:about|videos|streams))?\/?$/);
+    if (handle) username = handle[1];
+    else if (channel) id = channel[1];
+    else if (url.pathname === "/feeds/videos.xml") id = url.searchParams.get("channel_id");
+    else return res.status(400).json({ error: "Use a channel URL, RSS feed or @handle" });
+  }
+  if (username) {
+    if (!isSafeIdentifier(username)) return res.status(400).json({ error: "Invalid username" });
     try {
-      const html = (await axios.get(aboutUrl)).data;
-      const canonMatch = html.match(
-        /<link rel="canonical" href="https:\/\/www\.youtube\.com\/channel\/([^\"]+)"/
-      );
-      if (!canonMatch)
-        return res.status(400).json({ error: "Unable to resolve handle to channel ID" });
-      id = canonMatch[1];
+      const html = (await axios.get(`https://www.youtube.com/@${username}/about`, { timeout: AXIOS_TIMEOUT_MS, maxRedirects: 0 })).data;
+      id = html.match(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/channel\/([A-Za-z0-9_-]+)"/)?.[1];
     } catch {
       return res.status(400).json({ error: "Failed to fetch channel page" });
     }
-    xmlLink = `https://www.youtube.com/feeds/videos.xml?channel_id=${id}`;
-  } else {
-    // If user provided the raw feed URL
-    const feedMatch = link.match(/feeds\/videos\.xml\?channel_id=([^&]+)/);
-    if (feedMatch) {
-      id = feedMatch[1].replace(/^@/, "");
-      xmlLink = `https://www.youtube.com/feeds/videos.xml?channel_id=${id}`;
-    } else {
-      try {
-        const u = new URL(link);
-        id = u.searchParams.get("channel_id") || link.split("/").pop();
-      } catch {
-        return res.status(400).json({ error: "Invalid link" });
-      }
-      xmlLink = `https://www.youtube.com/feeds/videos.xml?channel_id=${id}`;
-    }
-    username = id;
   }
+  if (!isSafeIdentifier(id)) return res.status(400).json({ error: "Invalid or unresolved channel ID" });
+  username ||= id;
+  const xmlLink = `https://www.youtube.com/feeds/videos.xml?channel_id=${id}`;
 
   // Try to fetch the actual channel name from RSS feed
   let channelName = username;
@@ -269,7 +220,7 @@ router.post("/api/channels", async (req, res) => {
       console.error(`[ERROR] [Archived V] Invalid RSS URL for channel ${username}: ${xmlLink}`);
       channelName = username; // fallback
     } else {
-      const xml = (await axios.get(xmlLink)).data;
+      const xml = (await axios.get(xmlLink, { timeout: AXIOS_TIMEOUT_MS, maxRedirects: 0 })).data;
       const result = await xmlParser.parseStringPromise(xml);
       if (
         result.feed.author &&
@@ -302,7 +253,7 @@ router.post("/api/channels", async (req, res) => {
     if (!existing.channelName) existing.channelName = channelName;
   }
   db.write();
-  res.json({ id, link: xmlLink, username, channelName });
+  res.json(existing || { id, link: xmlLink, username, channelName });
 });
 
 // API: Delete channel
@@ -310,16 +261,19 @@ router.delete("/api/channels/:id", (req, res) => {
   const { id } = req.params;
   db.read();
   db.data.channels = db.data.channels.filter((c) => c.id !== id);
+  db.data.retryQueue = db.data.retryQueue.filter((job) => job.channelId !== id);
+  db.data.scheduledStreams = db.data.scheduledStreams.filter((job) => job.channelId !== id);
   db.write();
   res.json({ success: true });
 });
 
 // API: Add keyword
 router.post("/api/keywords", (req, res) => {
-  const { keyword } = req.body || {};
+  let { keyword } = req.body || {};
   if (typeof keyword !== "string" || !keyword.trim()) {
     return res.status(400).json({ error: "A non-empty keyword is required" });
   }
+  keyword = keyword.trim();
   db.read();
   if (!db.data.keywords.includes(keyword)) {
     db.data.keywords.push(keyword);
@@ -339,10 +293,11 @@ router.delete("/api/keywords/:keyword", (req, res) => {
 
 // API: Add ignore keyword
 router.post("/api/ignore-keywords", (req, res) => {
-  const { keyword } = req.body || {};
+  let { keyword } = req.body || {};
   if (typeof keyword !== "string" || !keyword.trim()) {
     return res.status(400).json({ error: "A non-empty keyword is required" });
   }
+  keyword = keyword.trim();
   db.read();
   if (!db.data.ignoreKeywords) db.data.ignoreKeywords = [];
   if (!db.data.ignoreKeywords.includes(keyword)) {
@@ -381,6 +336,8 @@ router.get("/api/status", (req, res) => {
   db.read();
   res.json({
     ...status,
+    currentDownloads: [...activeDownloads.values()].filter((dl) => !dl.cancelled).map((dl) => dl.downloadInfo),
+    retryQueue: getRetryQueueCounts(),
     scheduledStreams: db.data.scheduledStreams || [],
   });
 });
@@ -397,10 +354,7 @@ router.delete("/api/downloads/:downloadId", (req, res) => {
   try {
     // Kill the yt-dlp process
     download.cancelled = true;
-    download.proc.kill("SIGTERM");
-
-    // Remove from active downloads
-    activeDownloads.delete(downloadId);
+    stopDownload(download);
 
     // Remove from status and database
     status.currentDownloads = status.currentDownloads.filter((d) => d.id !== downloadId);
@@ -474,9 +428,14 @@ router.delete("/api/scheduled-streams/:videoId", (req, res) => {
   const { videoId } = req.params;
   db.read();
   if (!db.data.scheduledStreams) db.data.scheduledStreams = [];
+  const removed = db.data.scheduledStreams.filter((stream) => stream.videoId === videoId);
   const before = db.data.scheduledStreams.length;
   db.data.scheduledStreams = db.data.scheduledStreams.filter((s) => s.videoId !== videoId);
   if (db.data.scheduledStreams.length < before) {
+    for (const stream of removed) {
+      if (stream.title && !db.data.ignoreKeywords.includes(stream.title)) db.data.ignoreKeywords.push(stream.title);
+    }
+    db.data.retryQueue = db.data.retryQueue.filter((job) => job.videoId !== videoId);
     db.write();
     console.log(`[INFO] [Archived V] Removed scheduled stream: ${videoId}`);
     res.json({ success: true });
@@ -494,8 +453,7 @@ router.delete("/api/history", (req, res) => {
 });
 
 // API: Manual refresh
-router.post("/api/refresh", (req, res) => {
-  status.current = null;
+router.post("/api/refresh", authFsLimiter, (req, res) => {
   checkUpdates().catch((err) => console.error("[ERROR] [Archived V] Refresh error:", err));
   res.json(status);
   console.log(`[INFO] [Archived V] Manual Checking for New Streams`);
@@ -503,15 +461,23 @@ router.post("/api/refresh", (req, res) => {
 
 // Export setup function that configures production static serving
 export function setupProductionMiddleware(app) {
-  if (process.env.NODE_ENV === "production") {
+  if (process.env.NODE_ENV !== "development") {
     const clientDist = path.join(__dirname, "..", "client", "dist");
-    app.use(express.static(clientDist));
+    app.use(staticFsLimiter, express.static(clientDist));
 
     // Fallback for React SPA
-    app.use(staticFsLimiter, (req, res) => {
+    app.get(/.*/, (req, res, next) => {
+      if (req.path === "/api" || req.path.startsWith("/api/")) return next();
       res.sendFile(path.join(clientDist, "index.html"));
     });
   }
+  app.use((req, res) => res.status(404).json({ error: "Not found" }));
+  app.use((error, req, res, next) => {
+    if (res.headersSent) return next(error);
+    const statusCode = error.type === "entity.too.large" ? 413 : error.type === "entity.parse.failed" ? 400 : 500;
+    if (statusCode === 500) console.error(`[ERROR] [Archived V] Request failed: ${error.message}`);
+    res.status(statusCode).json({ error: statusCode === 413 ? "Request too large" : statusCode === 400 ? "Invalid JSON body" : "Request failed" });
+  });
 }
 
 export default router;

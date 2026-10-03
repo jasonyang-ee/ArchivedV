@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import path from "node:path";
+import { DOWNLOAD_DIR } from "./config.js";
+
 // Utility functions
 
 export function sleep(ms) {
@@ -6,7 +10,7 @@ export function sleep(ms) {
 
 export function jitter(ms) {
   const spread = Math.min(250, Math.max(50, Math.floor(ms * 0.1)));
-  return ms + Math.floor((Math.random() - 0.5) * 2 * spread);
+  return Math.max(0, ms + Math.floor((Math.random() - 0.5) * 2 * spread));
 }
 
 export function nowIso() {
@@ -21,48 +25,23 @@ export function normalizeError(err) {
 }
 
 export function buildChannelUrl(channelId, username) {
-  if (username) return `https://www.youtube.com/@${username}`;
+  if (username && username !== channelId) return `https://www.youtube.com/@${encodeURIComponent(username)}`;
   if (channelId) return `https://www.youtube.com/channel/${channelId}`;
   return null;
 }
 
 // Sanitize titles for filesystem
 export function sanitize(str) {
-  return str.replace(/[\/\\:*?"<>|]/g, "").trim();
+  return String(str || "").replace(/[\/\\:*?"<>|\x00-\x1f\x7f]/g, "").trim().replace(/[. ]+$/, "");
 }
 
 // URL validation to prevent SSRF attacks
 export function isValidYouTubeUrl(urlString) {
   try {
     const url = new URL(urlString);
-    
-    // Only allow HTTPS
-    if (url.protocol !== 'https:') {
-      return false;
-    }
-    
-    // Only allow youtube.com and youtu.be domains
-    const allowedDomains = ['youtube.com', 'www.youtube.com', 'youtu.be'];
-    if (!allowedDomains.includes(url.hostname)) {
-      return false;
-    }
-    
-    // Prevent localhost and private IP ranges
-    const hostname = url.hostname;
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('127.')) {
-      return false;
-    }
-    
-    // Check for private IP ranges
-    const ipMatch = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-    if (ipMatch) {
-      const [_, a, b, c, d] = ipMatch.map(Number);
-      // 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
-      if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) {
-        return false;
-      }
-    }
-    
+
+    if (url.protocol !== "https:" || url.username || url.password || url.port) return false;
+    if (!["youtube.com", "www.youtube.com", "youtu.be"].includes(url.hostname)) return false;
     return true;
   } catch {
     return false;
@@ -77,7 +56,7 @@ export function isLoopbackIp(ip) {
 
 // File type detection helpers
 export function isFinalVideoFile(name) {
-  return /\.(mp4|mkv|webm|avi|mov|flv|wmv)$/i.test(name) && !/\.f\d+\.(mp4|webm|mkv)$/i.test(name);
+  return /\.(mp4|mkv|webm|avi|mov|flv|wmv)$/i.test(name) && !/\.f\d+\.(mp4|mkv|webm|avi|mov|flv|wmv)$/i.test(name);
 }
 
 export function isPartialDownloadFile(name) {
@@ -101,3 +80,47 @@ export default {
   isPartialDownloadFile,
   isAuxiliaryFile,
 };
+
+export function isSafeIdentifier(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
+}
+
+export function isSafeDownloadPath(folder) {
+  if (typeof folder !== "string") return false;
+  const relative = path.relative(DOWNLOAD_DIR, path.resolve(folder));
+  if (!relative || relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return false;
+  let current = DOWNLOAD_DIR;
+  try {
+    for (const part of relative.split(path.sep)) {
+      current = path.join(current, part);
+      try { if (fs.lstatSync(current).isSymbolicLink()) return false; }
+      catch (error) { if (error.code !== "ENOENT") return false; }
+    }
+    return true;
+  } catch { return false; }
+}
+
+export function isSubstantialFile(file) {
+  try {
+    const stat = fs.lstatSync(file);
+    return stat.isFile() && stat.size > 1024 * 1024;
+  } catch { return false; }
+}
+
+export function downloadDirectory(channel, videoId, title, published, dateFormat = "YYYY-MM-DD") {
+  const username = channel.username || channel.id;
+  if (!isSafeIdentifier(username) || !isSafeIdentifier(videoId)) throw new Error("Invalid download identity");
+  let date = new Date(published || Date.now());
+  if (!Number.isFinite(date.getTime())) date = new Date();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const prefix = dateFormat === "MM-DD-YYYY" ? `${month}-${day}-${year}` : `${year}-${month}-${day}`;
+  let safeTitle = sanitize(title) || videoId;
+  // Include the full identity even at the supported identifier length boundary.
+  const titleBudget = Math.min(120, 255 - Buffer.byteLength(`[${prefix}]  [${videoId}]`, "utf8"));
+  while (Buffer.byteLength(safeTitle, "utf8") > titleBudget) safeTitle = [...safeTitle].slice(0, -1).join("");
+  const dir = path.join(DOWNLOAD_DIR, username, `[${prefix}] ${safeTitle} [${videoId}]`);
+  if (!isSafeDownloadPath(dir)) throw new Error("Unsafe download directory");
+  return dir;
+}

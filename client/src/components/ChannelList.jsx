@@ -1,3 +1,4 @@
+import ActionButton from "./ActionButton";
 import React, { useState } from "react";
 
 function ChannelList({ channels, onAddChannel, onDeleteChannel }) {
@@ -5,14 +6,15 @@ function ChannelList({ channels, onAddChannel, onDeleteChannel }) {
   const [isAdding, setIsAdding] = useState(false);
   const [error, setError] = useState("");
 
-  const handleAdd = async () => {
-    if (!channelInput.trim()) return;
-    
+  const handleAdd = async (event) => {
+    event.preventDefault();
+    if (isAdding || !channelInput.trim()) return;
+
     setIsAdding(true);
     setError("");
-    
+
     try {
-      await onAddChannel(channelInput);
+      await onAddChannel(channelInput.trim());
       setChannelInput("");
     } catch (err) {
       setError(err.message || "Failed to add channel");
@@ -53,22 +55,24 @@ function ChannelList({ channels, onAddChannel, onDeleteChannel }) {
                     {channel.channelName || channel.username}
                   </h3>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                       @{channel.username}
                     </p>
                     <a
-                      href={`https://www.youtube.com/@${channel.username}`}
+                      href={`https://www.youtube.com/channel/${encodeURIComponent(channel.id)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
+                      className="text-xs text-primary-700 dark:text-primary-400 hover:underline"
                     >
                       View →
                     </a>
                   </div>
                 </div>
-                <button
+                <ActionButton
                   onClick={() => onDeleteChannel(channel.id)}
                   className="ml-2 p-1 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                  aria-label={`Delete channel: ${channel.channelName || channel.username}`}
+                  pendingText="Deleting..."
                   title="Delete channel"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -79,7 +83,7 @@ function ChannelList({ channels, onAddChannel, onDeleteChannel }) {
                       d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                     />
                   </svg>
-                </button>
+                </ActionButton>
               </div>
             </div>
           ))
@@ -87,31 +91,32 @@ function ChannelList({ channels, onAddChannel, onDeleteChannel }) {
       </div>
 
       {/* Add Channel Form */}
-      <div className="space-y-2">
+      <form className="space-y-2" onSubmit={handleAdd}>
         {error && (
-          <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-600 dark:text-red-400">
+          <div role="alert" className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-600 dark:text-red-400">
             {error}
           </div>
         )}
+        <label className="label" htmlFor="channel-link">YouTube channel</label>
         <div className="flex gap-2">
           <input
+            id="channel-link"
             type="text"
             value={channelInput}
             onChange={(e) => setChannelInput(e.target.value)}
-            onKeyPress={(e) => e.key === "Enter" && handleAdd()}
             placeholder="@username or YouTube URL"
-            className="input flex-1"
+            className="input flex-1 min-w-0"
             disabled={isAdding}
           />
           <button
-            onClick={handleAdd}
+            type="submit"
             disabled={isAdding || !channelInput.trim()}
-            className="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn btn-primary"
           >
             {isAdding ? "Adding..." : "Add"}
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }

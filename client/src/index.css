@@ -1,16 +1,16 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary-50: #fef2f2;
-  --color-primary-100: #fee2e2;
-  --color-primary-200: #fecaca;
-  --color-primary-300: #fca5a5;
-  --color-primary-400: #f87171;
-  --color-primary-500: #ef4444;
-  --color-primary-600: #dc2626;
-  --color-primary-700: #b91c1c;
-  --color-primary-800: #991b1b;
-  --color-primary-900: #7f1d1d;
+  --color-primary-50: #fffbeb;
+  --color-primary-100: #fef3c7;
+  --color-primary-200: #fde68a;
+  --color-primary-300: #fcd34d;
+  --color-primary-400: #fbbf24;
+  --color-primary-500: #f59e0b;
+  --color-primary-600: #d97706;
+  --color-primary-700: #b45309;
+  --color-primary-800: #92400e;
+  --color-primary-900: #78350f;
 }
 
 @variant dark (&:where(.dark, .dark *));
@@ -22,12 +22,20 @@
 }
 
 @layer components {
+  button:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  :is(button, a, select):focus-visible {
+    @apply outline-2 outline-offset-2 outline-amber-600 dark:outline-amber-400;
+  }
+
   .btn {
     @apply px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors duration-200;
   }
 
   .btn-primary {
-    @apply bg-primary-600 text-white hover:bg-primary-700 dark:bg-primary-700 dark:hover:bg-primary-600;
+    @apply bg-primary-700 text-white hover:bg-primary-800 dark:bg-primary-500 dark:text-gray-950 dark:hover:bg-primary-400;
   }
 
   .btn-secondary {
@@ -39,7 +47,7 @@
   }
 
   .card {
-    @apply bg-white rounded-lg shadow-md p-4 sm:p-6 dark:bg-[#2a2a2a] dark:shadow-black/50;
+    @apply min-w-0 wrap-anywhere bg-white rounded-lg shadow-md p-4 sm:p-6 dark:bg-[#2a2a2a] dark:shadow-black/50;
   }
 
   .input {

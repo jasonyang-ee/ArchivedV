@@ -78,7 +78,7 @@ export default function CookieSettings() {
         <button
           onClick={handleToggleUseCookies}
           disabled={busy || !status}
-          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="btn btn-primary"
           title="Enable/disable using cookies for yt-dlp"
         >
           {status?.useCookies ? "Enabled" : "Disabled"}
@@ -95,13 +95,16 @@ export default function CookieSettings() {
       )}
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
+        <div role="alert" className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
           {error}
         </div>
       )}
 
       <div className="space-y-3">
+        <label className="label" htmlFor="cookies-text">Netscape cookies.txt</label>
         <textarea
+          id="cookies-text"
+          disabled={busy}
           value={cookiesText}
           onChange={(e) => setCookiesText(e.target.value)}
           placeholder="Paste the full cookies.txt content here"
@@ -113,7 +116,7 @@ export default function CookieSettings() {
           <button
             onClick={handleSaveCookies}
             disabled={busy || !cookiesText.trim()}
-            className="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn btn-primary"
           >
             Save Cookies
           </button>

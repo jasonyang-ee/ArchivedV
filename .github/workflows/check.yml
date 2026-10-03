@@ -2,192 +2,49 @@ name: Check
 
 on:
   push:
-    branches:
-      - main
-      - "feature/**"
-  pull_request:
-    branches:
-      - main
+    branches: [main, "feature/**"]
   workflow_dispatch:
   workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   build-test:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    if: "${{ github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'doc: ') }}"
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          username: ${{ secrets.USERNAME_DOCKERHUB }}
-          password: ${{ secrets.TOKEN_DOCKERHUB }}
-
-      - name: Build Docker Image (test)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          load: true
-          tags: ${{ secrets.USERNAME_DOCKERHUB }}/archivedv:test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Start container
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Build test image locally
+        run: docker build -t archivedv-test:local .
+      - name: Start test container
+        run: docker run -d --name archivedv-test -p 127.0.0.1:3000:3000 archivedv-test:local
+      - name: Verify frontend and APIs
         run: |
-          docker run -d \
-            --name archivedv-test \
-            -p 3000:3000 \
-            -e NODE_ENV=production \
-            ${{ secrets.USERNAME_DOCKERHUB }}/archivedv:test
-
-      - name: Wait for container to be ready
-        run: |
-          echo "Waiting for container to start..."
-          sleep 10
-          
-      - name: Container health check
-        run: |
-          for i in {1..30}; do
-            if curl -s http://localhost:3000 > /dev/null; then
-              echo "✓ Server is responding"
-              exit 0
-            fi
-            echo "Attempt $i: Waiting for server..."
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3000/api/status > /dev/null; then break; fi
             sleep 2
           done
-          echo "✗ Server failed to respond"
-          docker logs archivedv-test
-          exit 1
-
-      - name: Test API endpoints
-        run: |
-          echo "Testing API endpoints..."
-          
-          # Test main page
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/)
-          if [ "$HTTP_STATUS" -eq 200 ]; then
-            echo "✓ Main page: OK ($HTTP_STATUS)"
-          else
-            echo "✗ Main page: Failed ($HTTP_STATUS)"
-            exit 1
-          fi
-          
-          # Test API endpoint
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/api/status)
-          if [ "$HTTP_STATUS" -eq 200 ] || [ "$HTTP_STATUS" -eq 404 ]; then
-            echo "✓ API status: OK ($HTTP_STATUS)"
-          else
-            echo "✗ API status: Failed ($HTTP_STATUS)"
-            exit 1
-          fi
-
-      - name: Show container logs
-        if: always()
-        run: docker logs archivedv-test
-
-      - name: Cleanup
+          curl --fail --silent --show-error http://127.0.0.1:3000/ | grep -q '<!DOCTYPE html>'
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          for (const endpoint of ['config', 'status', 'history']) {
+            const response = await fetch(`http://127.0.0.1:3000/api/${endpoint}`);
+            assert.equal(response.status, 200, endpoint);
+            const data = await response.json();
+            if (endpoint === 'history') assert.deepEqual(data, []);
+            if (endpoint === 'status') assert.deepEqual(data.currentDownloads, []);
+            if (endpoint === 'config') assert.deepEqual(data.channels, []);
+          }
+          JS
+      - name: Container logs and cleanup
         if: always()
         run: |
-          docker stop archivedv-test || true
-          docker rm archivedv-test || true
-
-      - name: Build Docker Image
-        run: docker build -t archivedv-test:latest .
-
-      - name: Create test data directory
-        run: mkdir -p ./test-data
-
-      - name: Start Docker Container
-        run: |
-          docker run -d --name archivedv-test \
-            -p 3000:3000 \
-            -v $PWD/test-data:/app/data \
-            -e NODE_ENV=production \
-            archivedv-test:latest
-
-      - name: Wait for server to be ready
-        run: |
-          echo "Waiting for server to be ready..."
-          sleep 10
-
-          # Check if container is running
-          echo "Checking container status..."
-          docker ps -a | grep archivedv-test
-
-          # Check container logs to see if server started
-          echo "Container logs:"
-          docker logs archivedv-test || echo "Could not get logs"
-
-          echo "Waiting for HTTP response on port 3000..."
-          timeout 120 bash -c 'until curl -f http://127.0.0.1:3000 > /dev/null 2>&1; do
-              echo "Still waiting... (curl exit code: $?)"
-              sleep 3
-          done' || (echo "ERROR: Server health check failed after 120 seconds" && docker logs archivedv-test && exit 1)
-
-          echo "Server responding on root endpoint, checking /api/config..."
-          timeout 30 bash -c 'until curl -f http://127.0.0.1:3000/api/config > /dev/null 2>&1; do
-              echo "Still waiting for /api/config..."
-              sleep 2
-          done' || (echo "ERROR: API endpoint /api/config not responding" && docker logs archivedv-test && exit 1)
-
-          echo "Server is ready!"
-
-      - name: Check server logs
-        run: |
-          echo "=== Server Logs ==="
-          docker logs archivedv-test
-
-          # Verify expected log messages
-          docker logs archivedv-test 2>&1 | grep -q "Server running on port" || (echo "ERROR: Server start message not found" && exit 1)
-          docker logs archivedv-test 2>&1 | grep -q "Environment: production" || (echo "ERROR: Environment message not found" && exit 1)
-
-          echo "✅ Server logs verification passed"
-
-      - name: Test API endpoints
-        run: |
-          echo "Testing API endpoints..."
-
-          # Test GET /api/config
-          curl -f http://localhost:3000/api/config || (echo "ERROR: GET /api/config failed" && exit 1)
-          echo "✅ GET /api/config passed"
-
-          # Test GET /api/status
-          curl -f http://localhost:3000/api/status || (echo "ERROR: GET /api/status failed" && exit 1)
-          echo "✅ GET /api/status passed"
-
-          # Test GET /api/history
-          RESPONSE=$(curl -s http://localhost:3000/api/history)
-          if [ "$RESPONSE" != "[]" ]; then
-            echo "ERROR: Expected empty array from /api/history"
-            exit 1
-          fi
-          echo "✅ GET /api/history passed"
-
-      - name: Test frontend
-        run: |
-          echo "Testing frontend..."
-          curl -f http://localhost:3000/ || (echo "ERROR: Frontend not accessible" && exit 1)
-          curl -s http://localhost:3000/ | grep -q "<!DOCTYPE html>" || (echo "ERROR: Frontend HTML not correct" && exit 1)
-          echo "✅ Frontend test passed"
-
-      - name: Test health check
-        run: |
-          echo "Testing health check..."
-          curl -f http://localhost:3000/ || (echo "ERROR: Health check failed" && exit 1)
-          echo "✅ Health check passed"
-
-      - name: Stop and remove container
-        if: always()
-        run: |
-          docker stop archivedv-test || true
-          docker rm archivedv-test || true
+          docker logs archivedv-test || true
+          docker rm -f archivedv-test || true

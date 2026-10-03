@@ -185,7 +185,7 @@ else
         echo "${BLUE}Latest tag: ${BOLD}$LATEST_TAG${NC}"
 
         # Check commit messages since last tag
-        COMMITS_SINCE_TAG=$(git log "$LATEST_TAG"..HEAD --oneline 2>/dev/null || echo "")
+        COMMITS_SINCE_TAG=$(git log "$LATEST_TAG"..HEAD --format=%B 2>/dev/null || echo "")
 
         if [ -z "$COMMITS_SINCE_TAG" ]; then
             echo "${YELLOW}No commits since last tag. Nothing to release.${NC}"
@@ -193,11 +193,11 @@ else
         fi
 
         # Auto-detect release type
-        if echo "$COMMITS_SINCE_TAG" | grep -qi "BREAKING CHANGE\|breaking:"; then
+        if echo "$COMMITS_SINCE_TAG" | grep -Eqi "BREAKING[ -]CHANGE:|^[a-z]+(\([^)]*\))?!:"; then
             RELEASE_TYPE="major"
-        elif echo "$COMMITS_SINCE_TAG" | grep -qi "^[a-f0-9]* feat"; then
+        elif echo "$COMMITS_SINCE_TAG" | grep -Eq "^feat(\([^)]*\))?:"; then
             RELEASE_TYPE="minor"
-        elif echo "$COMMITS_SINCE_TAG" | grep -qi "^[a-f0-9]* fix"; then
+        elif echo "$COMMITS_SINCE_TAG" | grep -Eq "^fix(\([^)]*\))?:"; then
             RELEASE_TYPE="patch"
         else
             echo "${YELLOW}No conventional commits found (feat:/fix:). Defaulting to patch.${NC}"
@@ -340,9 +340,12 @@ if [ -z "$CHANGELOG_CONTENT" ]; then
 fi
 
 # Create draft release (release.yml publishes it after the image build succeeds)
+NOTES_FILE=$(mktemp)
+trap 'rm -f "$NOTES_FILE"' EXIT
+printf '%s\n' "$CHANGELOG_CONTENT" > "$NOTES_FILE"
 if gh release create "$TAG" \
     --title "$TAG" \
-    --notes "$CHANGELOG_CONTENT" \
+    --notes-file "$NOTES_FILE" \
     --draft; then
     echo ""
     echo "${GREEN}${BOLD}Release ${TAG} created successfully!${NC}"

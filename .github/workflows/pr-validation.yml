@@ -2,71 +2,11 @@ name: PR Validation
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run tests
-        run: npm test
-
-      - name: Build frontend
-        run: npm run build
-
-      - name: Verify build artifacts
-        run: |
-          echo "Checking build artifacts..."
-          test -d client/dist || (echo "✗ client/dist directory not found" && exit 1)
-          test -f client/dist/index.html || (echo "✗ index.html not found" && exit 1)
-          test -d client/dist/assets || (echo "✗ assets directory not found" && exit 1)
-          echo "✓ Build artifacts verified"
-
-      - name: Test Docker build
-        run: |
-          echo "Testing Docker build..."
-          docker build -t archivedv-pr-test:latest .
-          echo "✓ Docker build successful"
-
-      - name: Quick container test
-        run: |
-          echo "Running quick container test..."
-          docker run -d --name archivedv-pr-test -p 3000:3000 archivedv-pr-test:latest
-          
-          # Wait for startup
-          sleep 10
-          
-          # Health check
-          for i in {1..15}; do
-            if curl -s http://localhost:3000 > /dev/null; then
-              echo "✓ Container health check passed"
-              exit 0
-            fi
-            sleep 2
-          done
-          
-          echo "✗ Health check failed"
-          docker logs archivedv-pr-test
-          exit 1
-
-      - name: Cleanup
-        if: always()
-        run: |
-          docker stop archivedv-pr-test || true
-          docker rm archivedv-pr-test || true
+    uses: ./.github/workflows/check.yml

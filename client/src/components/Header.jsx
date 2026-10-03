@@ -1,6 +1,14 @@
-import React from "react";
+import React, { useState } from "react";
 
 function Header({ darkMode, toggleDarkMode, dateFormat, onDateFormatChange }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  async function changeDate(value) {
+    setSaving(true);
+    setError("");
+    try { await onDateFormatChange(value); } catch (error) { setError(error.message); }
+    finally { setSaving(false); }
+  }
   return (
     <header className="bg-white dark:bg-[#2a2a2a] shadow-sm dark:shadow-black/50 border-b border-gray-200 dark:border-[#3a3a3a]">
       <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -13,24 +21,29 @@ function Header({ darkMode, toggleDarkMode, dateFormat, onDateFormatChange }) {
               Stream Tracking and Archiving Service
             </p>
           </div>
-          <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
+          <div className="flex items-center gap-2 sm:gap-4 flex-wrap min-w-0 max-w-full">
             {/* Date Format Selector */}
-            <div className="flex items-center gap-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden sm:inline">
+            <div className="flex items-center gap-2 flex-wrap min-w-0 max-w-full">
+              <label htmlFor="date-format" className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden sm:inline">
                 Date Format:
               </label>
               <select
+                id="date-format"
+                aria-label="Date format"
+                disabled={saving}
                 value={dateFormat}
-                onChange={(e) => onDateFormatChange(e.target.value)}
+                onChange={(e) => changeDate(e.target.value)}
                 className="px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-white dark:bg-[#1a1a1a] border border-gray-300 dark:border-[#3a3a3a] text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 dark:focus:ring-amber-600 transition-colors"
               >
                 <option value="YYYY-MM-DD">YYYY-MM-DD</option>
                 <option value="MM-DD-YYYY">MM-DD-YYYY</option>
               </select>
+              {error && <span role="alert" className="basis-full wrap-anywhere text-sm text-red-700 dark:text-red-300">{error}</span>}
             </div>
-            
+
             {/* Dark Mode Toggle */}
             <button
+              aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
               onClick={toggleDarkMode}
               className="flex items-center gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/30 dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-400 transition-colors font-medium text-sm"
               title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
@@ -62,6 +75,7 @@ function Header({ darkMode, toggleDarkMode, dateFormat, onDateFormatChange }) {
               )}
             </button>
             <a
+              aria-label="ArchivedV on GitHub"
               href="https://github.com/jasonyang-ee/ArchivedV"
               target="_blank"
               rel="noopener noreferrer"

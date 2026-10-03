@@ -1,443 +1,183 @@
 import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
-import { DOWNLOAD_DIR } from "./config.js";
+import { DOWNLOAD_DIR, MERGE_TIMEOUT_MS } from "./config.js";
+import { isFinalVideoFile, isSubstantialFile, isSafeDownloadPath } from "./utils.js";
 
-// Check if file is a partial/fragment video file (e.g., .f299.mp4, .f140.mp4, .f303.webm)
-function isFragmentFile(filename) {
-  return /\.f\d+\.(mp4|webm|mkv|m4a|opus|ogg)$/i.test(filename);
+// Shared ownership prevents startup recovery from reading files still being written.
+export const downloadingFolders = new Set();
+const mergingFolders = new Map();
+const mergeProcesses = new Set();
+let stopping = false;
+export function hasActiveMerges() { return mergingFolders.size > 0; }
+
+export function stopMerges() {
+  stopping = true;
+  for (const proc of mergeProcesses) proc.kill("SIGKILL");
+}
+export function isFolderBusy(folder) {
+  const key = path.resolve(folder);
+  return downloadingFolders.has(key) || mergingFolders.has(key);
 }
 
-// Extract the base title from a fragment filename
-function getFragmentTitle(filename) {
-  // Match patterns like "Title.f299.mp4" -> "Title"
-  const match = filename.match(/^(.+)\.f\d+\.(mp4|webm|mkv|m4a|opus|ogg)$/i);
-  return match ? match[1] : null;
+function fragmentInfo(filename) {
+  const match = filename.match(/^(.+)\.f(\d+)\.(mp4|webm|mkv|m4a|opus|ogg)$/i);
+  if (!match) return null;
+  const audio = /^(139|140|141|249|250|251|256|258|327|328)$/.test(match[2]) || /^(m4a|opus|ogg)$/i.test(match[3]);
+  return { title: match[1], audio };
 }
 
-// Get the format ID from a fragment filename
-function getFormatId(filename) {
-  const match = filename.match(/\.f(\d+)\.(mp4|webm|mkv|m4a|opus|ogg)$/i);
-  return match ? match[1] : null;
-}
-
-// Clean up fragment files after successful merge with retry logic
-function cleanupFragmentFiles(folder, title, parts, attempt = 1, maxAttempts = 5) {
-  const filesToDelete = [];
-  
-  // Get all files in folder for scanning frag files
-  let folderFiles = [];
-  try {
-    folderFiles = fs.readdirSync(folder);
-  } catch (e) {
-    console.warn(`[WARN] [Archived V] Failed to read folder for cleanup: ${e.message}`);
+// Walk only real directories under the archive; never follow symlinks.
+function findDownloadFolders(root, depth = 0) {
+  if (depth > 4) return [];
+  const folders = [];
+  let entries;
+  try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch (error) {
+    console.warn(`[WARN] [Archived V] Cannot scan ${root}: ${error.message}`);
+    return folders;
   }
-  
-  // Collect all video fragments and their related files
-  for (const vf of parts.videos) {
-    filesToDelete.push(path.join(folder, vf));
-    filesToDelete.push(path.join(folder, vf + '.ytdl'));
-    
-    // Find any -Frag### files for this fragment
-    const fragPattern = vf + '-Frag';
-    for (const file of folderFiles) {
-      if (file.startsWith(fragPattern)) {
-        filesToDelete.push(path.join(folder, file));
-      }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      const folder = path.join(root, entry.name);
+      folders.push(folder, ...findDownloadFolders(folder, depth + 1));
     }
   }
-  
-  // Collect all audio fragments and their related files
-  for (const af of parts.audios) {
-    filesToDelete.push(path.join(folder, af));
-    filesToDelete.push(path.join(folder, af + '.ytdl'));
-    
-    // Find any -Frag### files for this fragment
-    const fragPattern = af + '-Frag';
-    for (const file of folderFiles) {
-      if (file.startsWith(fragPattern)) {
-        filesToDelete.push(path.join(folder, file));
-      }
-    }
-  }
-  
-  const failedFiles = [];
-  
-  for (const filePath of filesToDelete) {
-    try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    } catch (e) {
-      if (e.code === 'EBUSY' || e.code === 'EPERM') {
-        failedFiles.push(filePath);
-      } else {
-        console.warn(`[WARN] [Archived V] Failed to delete "${path.basename(filePath)}": ${e.message}`);
-      }
-    }
-  }
-  
-  // Retry failed files with exponential backoff
-  if (failedFiles.length > 0 && attempt < maxAttempts) {
-    const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s, 16s...
-    console.log(`[INFO] [Archived V] Retrying cleanup for "${title}" in ${delay / 1000}s (attempt ${attempt + 1}/${maxAttempts})`);
-    setTimeout(() => {
-      cleanupFragmentFilesRetry(failedFiles, title, attempt + 1, maxAttempts);
-    }, delay);
-  } else if (failedFiles.length > 0) {
-    console.warn(`[WARN] [Archived V] Could not delete ${failedFiles.length} file(s) for "${title}" after ${maxAttempts} attempts. Files may need manual cleanup.`);
-  }
-}
-
-// Retry cleanup for specific files
-function cleanupFragmentFilesRetry(files, title, attempt, maxAttempts) {
-  const stillFailed = [];
-  
-  for (const filePath of files) {
-    try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    } catch (e) {
-      if (e.code === 'EBUSY' || e.code === 'EPERM') {
-        stillFailed.push(filePath);
-      } else {
-        console.warn(`[WARN] [Archived V] Failed to delete "${path.basename(filePath)}": ${e.message}`);
-      }
-    }
-  }
-  
-  if (stillFailed.length > 0 && attempt < maxAttempts) {
-    const delay = Math.pow(2, attempt) * 1000;
-    console.log(`[INFO] [Archived V] Retrying cleanup for "${title}" in ${delay / 1000}s (attempt ${attempt + 1}/${maxAttempts})`);
-    setTimeout(() => {
-      cleanupFragmentFilesRetry(stillFailed, title, attempt + 1, maxAttempts);
-    }, delay);
-  } else if (stillFailed.length > 0) {
-    console.warn(`[WARN] [Archived V] Could not delete ${stillFailed.length} file(s) for "${title}" after ${maxAttempts} attempts: ${stillFailed.map(f => path.basename(f)).join(', ')}`);
-  } else {
-    console.log(`[INFO] [Archived V] Successfully cleaned up fragment files for "${title}"`);
-  }
-}
-
-// Check if a file is a video fragment (vs audio)
-function isVideoFragment(filename, files) {
-  // Common video format IDs (high quality video streams)
-  // This is not exhaustive but covers the most common cases
-  const videoFormatIds = [
-    '299', '298', '303', '302', '308', '315', '313', '271', // VP9/AV1 high quality
-    '137', '136', '135', '134', '133', '160', // H.264
-    '248', '247', '244', '243', '242', '278', // VP9
-    '616', '614', '612', '610', '608', '606', '604', '602', '600', '598', '596', '594', '571', // AV1
-    '337', '336', '335', '334', '333', '332', '331', '330', '329', // HDR
-    '400', '401', '402', // AV1
-    '699', '698', '697', '696', '695', '694', // VP9
-  ];
-  
-  const formatId = getFormatId(filename);
-  if (!formatId) return false;
-  
-  // Check known video format IDs
-  if (videoFormatIds.includes(formatId)) return true;
-  
-  // Check file extension - m4a, opus, ogg are typically audio
-  if (/\.(m4a|opus|ogg)$/i.test(filename)) return false;
-  
-  // For mp4/webm/mkv, check if there's an audio file with same title
-  // If this appears to be paired with an audio file, it's likely video
-  const title = getFragmentTitle(filename);
-  if (!title) return false;
-  
-  const hasAudioPair = files.some(f => {
-    if (f === filename) return false;
-    const fTitle = getFragmentTitle(f);
-    if (fTitle !== title) return false;
-    // If the other file is m4a/opus/ogg, treat current as video
-    return /\.(m4a|opus|ogg)$/i.test(f);
-  });
-  
-  return hasAudioPair;
-}
-
-// Check if a file is an audio fragment
-function isAudioFragment(filename) {
-  // Common audio format IDs
-  const audioFormatIds = [
-    '140', '141', '139', '251', '250', '249', '258', '256', '327', '328',
-  ];
-  
-  const formatId = getFormatId(filename);
-  if (!formatId) return false;
-  
-  // Check known audio format IDs
-  if (audioFormatIds.includes(formatId)) return true;
-  
-  // Check file extension
-  return /\.(m4a|opus|ogg)$/i.test(filename);
+  return folders;
 }
 
 export function autoMerge(specificFolder = null, callback = null) {
+  if (specificFolder) return mergeInFolder(specificFolder, callback);
+  let folders;
   try {
-    if (specificFolder) {
-      mergeInFolder(specificFolder, callback);
-    } else {
-      console.log('[INFO] [Archived V] Starting auto merge of audio and video in all folders');
-      const videosFolders = findVideosFolders(DOWNLOAD_DIR);
-      
-      // Also scan direct download folders
-      const directFolders = findDirectDownloadFolders(DOWNLOAD_DIR);
-      const allFolders = [...new Set([...videosFolders, ...directFolders])];
-      
-      for (const folder of allFolders) {
-        mergeInFolder(folder);
-      }
-      console.log('[INFO] [Archived V] Auto merge completed for all folders');
-    }
-  } catch (e) {
-    console.error('[ERROR] [Archived V] Error during auto merge:', e.message);
-    if (callback) callback();
+    folders = findDownloadFolders(DOWNLOAD_DIR);
+  } catch (error) {
+    console.error(`[ERROR] [Archived V] Cannot scan archive: ${error.message}`);
+    callback?.({ ok: false });
+    return;
   }
+  // Keep startup recovery serial to bound ffmpeg concurrency.
+  let index = 0;
+  const next = () => {
+    if (stopping) return callback?.({ ok: false });
+    if (index === folders.length) return callback?.({ ok: true });
+    mergeInFolder(folders[index++], () => setImmediate(next));
+  };
+  next();
 }
 
-function findVideosFolders(root) {
-  const folders = [];
-  function walk(dir) {
-    try {
-      const items = fs.readdirSync(dir);
-      for (const item of items) {
-        const fullPath = path.join(dir, item);
-        try {
-          const stat = fs.statSync(fullPath);
-          if (stat.isDirectory()) {
-            if (item === 'videos') {
-              const parent = path.dirname(fullPath);
-              if (path.basename(parent) === 'channels') {
-                folders.push(fullPath);
-              }
-            } else {
-              walk(fullPath);
-            }
-          }
-        } catch (e) {
-          // ignore errors on individual items
-        }
+function cleanupFragments(folder, selected) {
+  const files = fs.readdirSync(folder);
+  for (const fragment of selected) {
+    const related = files.filter((name) => name === fragment || name === `${fragment}.ytdl` ||
+      (name.startsWith(`${fragment}-Frag`) && /^\d+(?:\.part)?$/.test(name.slice(`${fragment}-Frag`.length))));
+    for (const name of related) {
+      try {
+        fs.unlinkSync(path.join(folder, name));
+      } catch (error) {
+        console.warn(`[WARN] [Archived V] Could not clean fragment ${name}: ${error.message}`);
       }
-    } catch (e) {
-      // ignore errors on directories
     }
   }
-  walk(root);
-  return folders;
-}
-
-// Find download folders that contain fragment files directly
-function findDirectDownloadFolders(root) {
-  const folders = [];
-  
-  function walk(dir, depth = 0) {
-    if (depth > 4) return; // Limit depth to prevent scanning too deep
-    
-    try {
-      const items = fs.readdirSync(dir);
-      
-      // Check if this folder has fragment files
-      const hasFragments = items.some(item => isFragmentFile(item));
-      if (hasFragments) {
-        folders.push(dir);
-      }
-      
-      // Continue walking subdirectories
-      for (const item of items) {
-        const fullPath = path.join(dir, item);
-        try {
-          const stat = fs.statSync(fullPath);
-          if (stat.isDirectory()) {
-            walk(fullPath, depth + 1);
-          }
-        } catch (e) {
-          // ignore errors on individual items
-        }
-      }
-    } catch (e) {
-      // ignore errors on directories
-    }
-  }
-  
-  walk(root);
-  return folders;
 }
 
 export function mergeInFolder(folder, callback = null) {
-  try {
-    const files = fs.readdirSync(folder);
-    
-    // Check if there's already a final merged file (non-fragment video)
-    const hasFinalVideo = files.some(f => 
-      /\.(mp4|mkv|webm)$/i.test(f) && !isFragmentFile(f)
-    );
-    
-    if (hasFinalVideo) {
-      console.log(`[INFO] [Archived V] Skipping merge in folder ${folder} - already has final video`);
-      if (callback) callback();
-      return;
-    }
-    
-    // Group fragment files by title
-    const titleMap = new Map();
-    
-    for (const file of files) {
-      if (!isFragmentFile(file)) continue;
-      
-      const title = getFragmentTitle(file);
-      if (!title) continue;
-      
-      if (!titleMap.has(title)) {
-        titleMap.set(title, { videos: [], audios: [] });
-      }
-      
-      const entry = titleMap.get(title);
-      
-      if (isAudioFragment(file)) {
-        entry.audios.push(file);
-      } else if (isVideoFragment(file, files)) {
-        entry.videos.push(file);
-      }
-    }
-    
-    // If no pairs found, exit
-    if (titleMap.size === 0) {
-      if (callback) callback();
-      return;
-    }
-    
-    console.log(`[INFO] [Archived V] Starting auto merge of audio and video in folder: ${folder}`);
-    
-    // Find titles that have both video and audio
-    const titleParts = Array.from(titleMap.entries()).filter(
-      ([title, parts]) => parts.videos.length > 0 && parts.audios.length > 0
-    );
-    
-    if (titleParts.length === 0) {
-      if (callback) callback();
-      return;
-    }
-    
-    let completed = 0;
-    
-    for (const [title, parts] of titleParts) {
-      // Use the best quality video and audio (first in list, as yt-dlp sorts by quality)
-      const videoFile = parts.videos[0];
-      const audioFile = parts.audios[0];
-      
-      // Determine output extension based on input video
-      const videoExt = path.extname(videoFile).toLowerCase();
-      const outputExt = videoExt === '.webm' ? '.mkv' : '.mp4'; // webm video + m4a audio -> mkv; mp4 + m4a -> mp4
-      const output = `${title}${outputExt}`;
-      const outputPath = path.join(folder, output);
-      
-      if (fs.existsSync(outputPath)) {
-        console.log(`[INFO] [Archived V] Merged file already exists for "${title}", skipping.`);
-        completed++;
-        if (completed === titleParts.length && callback) callback();
-        continue;
-      }
-      
-      console.log(`[INFO] [Archived V] Merging video "${videoFile}" + audio "${audioFile}" -> "${output}"`);
-
-      // Pre-check: skip merge if any fragment is corrupt (< 1KB)
-      const corruptThreshold = 1024;
-      let hasCorrupt = false;
-      const allFrags = [...parts.videos, ...parts.audios];
-      for (const frag of allFrags) {
-        const fragPath = path.join(folder, frag);
-        try {
-          const stat = fs.statSync(fragPath);
-          if (stat.size < corruptThreshold) {
-            fs.unlinkSync(fragPath);
-            console.log(`[INFO] [Archived V] Deleted corrupt fragment "${frag}" (${stat.size} bytes) to allow re-download`);
-            try { fs.unlinkSync(fragPath + '.ytdl'); } catch {}
-            hasCorrupt = true;
-          }
-        } catch {}
-      }
-      if (hasCorrupt) {
-        completed++;
-        if (completed === titleParts.length && callback) callback();
-        continue;
-      }
-
-      try {
-        const proc = spawn('ffmpeg', [
-          '-loglevel', 'error',  // Quiet mode - only show errors
-          '-y',                   // Overwrite output without asking
-          '-i', path.join(folder, videoFile),
-          '-i', path.join(folder, audioFile),
-          '-c', 'copy',
-          outputPath
-        ], { stdio: ['ignore', 'ignore', 'pipe'] }); // Only capture stderr for errors
-        
-        let stderrOutput = '';
-        proc.stderr.on('data', (data) => {
-          stderrOutput += data.toString();
-        });
-
-        // close follows a failed spawn too; keep callback/cleanup ownership there.
-        proc.on('error', (error) => {
-          stderrOutput += `\n${error.message}`;
-        });
-        
-        proc.on('close', (code) => {
-          if (code === 0) {
-            console.log(`[INFO] [Archived V] Successfully merged "${title}"`);
-
-            // Delay cleanup to allow file handles to be released
-            setTimeout(() => {
-              cleanupFragmentFiles(folder, title, parts);
-            }, 1000);
-          } else {
-            console.error(`[ERROR] [Archived V] Failed to merge "${title}", ffmpeg exit code ${code}`);
-            if (stderrOutput.trim()) {
-              console.error(`[ERROR] [Archived V] ffmpeg error: ${stderrOutput.trim()}`);
-            }
-
-            // Delete corrupt/empty fragment files so yt-dlp can re-download them fresh.
-            // With --no-part, yt-dlp treats existing files as "already downloaded" and skips them,
-            // so corrupt fragments block recovery permanently unless removed.
-            const corruptThreshold = 1024; // 1KB - fragments below this are certainly corrupt
-            const allFrags = [...parts.videos, ...parts.audios];
-            for (const frag of allFrags) {
-              const fragPath = path.join(folder, frag);
-              try {
-                const stat = fs.statSync(fragPath);
-                if (stat.size < corruptThreshold) {
-                  fs.unlinkSync(fragPath);
-                  console.log(`[INFO] [Archived V] Deleted corrupt fragment "${frag}" (${stat.size} bytes) to allow re-download`);
-                  // Also remove associated .ytdl metadata file
-                  try { fs.unlinkSync(fragPath + '.ytdl'); } catch {}
-                }
-              } catch {}
-            }
-          }
-          
-          completed++;
-          if (completed === titleParts.length && callback) {
-            console.log(`[INFO] [Archived V] Auto merge completed for folder: ${folder}`);
-            callback();
-          }
-        });
-      } catch (e) {
-        console.error(`[ERROR] [Archived V] Error starting ffmpeg for "${title}": ${e.message}`);
-        completed++;
-        if (completed === titleParts.length && callback) callback();
-      }
-    }
-  } catch (e) {
-    console.error(`[ERROR] [Archived V] Error merging in folder ${folder}: ${e.message}`);
-    if (callback) callback();
+  const key = path.resolve(folder);
+  if (stopping || !isSafeDownloadPath(key) || downloadingFolders.has(key)) {
+    callback?.({ ok: false });
+    return;
   }
+  if (mergingFolders.has(key)) {
+    if (callback) mergingFolders.get(key).push(callback);
+    return;
+  }
+  mergingFolders.set(key, callback ? [callback] : []);
+  const finish = (ok) => {
+    const callbacks = mergingFolders.get(key) || [];
+    mergingFolders.delete(key);
+    for (const cb of callbacks) cb({ ok });
+  };
+
+  let groups;
+  try {
+    const files = fs.readdirSync(folder, { withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => entry.name);
+    const titleMap = new Map();
+    for (const file of files) {
+      const info = fragmentInfo(file);
+      if (!info) continue;
+      if (!titleMap.has(info.title)) titleMap.set(info.title, { videos: [], audios: [] });
+      titleMap.get(info.title)[info.audio ? "audios" : "videos"].push(file);
+    }
+    groups = [...titleMap].filter(([, parts]) => parts.videos.length && parts.audios.length);
+  } catch (error) {
+    console.error(`[ERROR] [Archived V] Cannot inspect merge folder: ${error.message}`);
+    finish(false);
+    return;
+  }
+
+  let index = 0;
+  let allOk = true;
+  const next = () => {
+    if (stopping) return finish(false);
+    if (index === groups.length) return finish(allOk);
+    const [title, parts] = groups[index++];
+    // Prefer the largest available streams, not lexicographic format IDs.
+    const bySize = (a, b) => fs.statSync(path.join(folder, b)).size - fs.statSync(path.join(folder, a)).size;
+    let selected, outputPath, temporaryPath;
+    try {
+      const existing = fs.readdirSync(folder).some((file) =>
+        (file === `${title}.mp4` || file === `${title}.mkv` || file === `${title}.webm` ||
+          file === `${title}.recovered.mp4` || file === `${title}.recovered.mkv`) &&
+        isFinalVideoFile(file) && isSubstantialFile(path.join(folder, file)));
+      if (existing) return next();
+      selected = [parts.videos.sort(bySize)[0], parts.audios.sort(bySize)[0]];
+      let corrupt = false;
+      for (const file of selected) {
+        if (fs.statSync(path.join(folder, file)).size < 1024) {
+          fs.unlinkSync(path.join(folder, file));
+          fs.rmSync(path.join(folder, `${file}.ytdl`), { force: true });
+          corrupt = true;
+        }
+      }
+      if (corrupt) { allOk = false; return next(); }
+      const extension = path.extname(selected[0]).toLowerCase() === ".mp4" ? ".mp4" : ".mkv";
+      outputPath = path.join(folder, `${title}${extension}`);
+      // Preserve even a small existing final file; recovery gets its own name.
+      if (fs.existsSync(outputPath)) outputPath = path.join(folder, `${title}.recovered${extension}`);
+      if (fs.existsSync(outputPath)) { allOk = false; return next(); }
+      temporaryPath = `${outputPath}.merging.part`;
+      const proc = spawn("ffmpeg", [
+        "-nostdin", "-loglevel", "error", "-y",
+        "-i", path.join(folder, selected[0]), "-i", path.join(folder, selected[1]),
+        "-map", "0:v:0", "-map", "1:a:0", "-c", "copy",
+        "-f", extension === ".mp4" ? "mp4" : "matroska", temporaryPath,
+      ], { stdio: ["ignore", "ignore", "pipe"], timeout: MERGE_TIMEOUT_MS, killSignal: "SIGKILL" });
+      mergeProcesses.add(proc);
+      let stderr = "";
+      proc.stderr.on("data", (data) => { stderr = (stderr + data).slice(-16384); });
+      proc.on("error", (error) => { stderr = (stderr + error.message).slice(-16384); });
+      proc.once("close", (code) => {
+        mergeProcesses.delete(proc);
+        try {
+          if (stopping || code !== 0 || !isSubstantialFile(temporaryPath)) throw new Error(`ffmpeg exit ${code}; ${stderr.trim() || "no substantial output"}`);
+          // Exclusive publication never overwrites a final file created by another writer.
+          fs.linkSync(temporaryPath, outputPath);
+          fs.unlinkSync(temporaryPath);
+          cleanupFragments(folder, selected);
+          console.log(`[INFO] [Archived V] Recovered video: ${path.basename(outputPath)}`);
+        } catch (error) {
+          allOk = false;
+          console.error(`[ERROR] [Archived V] Merge failed: ${error.message}`);
+          try { fs.rmSync(temporaryPath, { force: true }); } catch {}
+        }
+        next();
+      });
+    } catch (error) {
+      allOk = false;
+      console.error(`[ERROR] [Archived V] Could not start merge: ${error.message}`);
+      next();
+    }
+  };
+  next();
 }
 
-export default {
-  autoMerge,
-  mergeInFolder,
-};
+export default { autoMerge, mergeInFolder };

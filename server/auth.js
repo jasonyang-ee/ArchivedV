@@ -1,4 +1,6 @@
 import fs from "fs";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
 import db from "./database.js";
 import {
   YTDLP_COOKIES_PATH,
@@ -76,3 +78,32 @@ export default {
   getYtDlpAuthArgs,
   classifyYtDlpAuthFailure,
 };
+
+export function validateCookies(text) {
+  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
+  if (!/^# (?:Netscape )?HTTP Cookie File/.test(lines[0] || "")) throw new Error("Expected a Netscape cookies.txt file");
+  let count = 0;
+  for (let line of lines.slice(1)) {
+    if (line.startsWith("#HttpOnly_")) line = line.slice(10);
+    else if (!line.trim() || line.startsWith("#")) continue;
+    const fields = line.split("\t");
+    if (fields.length !== 7 || !fields[0] || !/^(TRUE|FALSE)$/.test(fields[1]) || !fields[2].startsWith("/") ||
+      !/^(TRUE|FALSE)$/.test(fields[3]) || !/^\d+$/.test(fields[4]) || !fields[5] || line.includes("\0")) {
+      throw new Error("Invalid Netscape cookie record");
+    }
+    count++;
+  }
+  if (!count) throw new Error("Cookie file has no cookie records");
+}
+
+export function saveCookies(text) {
+  const temporaryPath = `${YTDLP_COOKIES_PATH}.${randomUUID()}.tmp`;
+  fs.mkdirSync(path.dirname(YTDLP_COOKIES_PATH), { recursive: true });
+  try {
+    fs.writeFileSync(temporaryPath, text, { encoding: "utf8", mode: 0o600, flag: "wx", flush: true });
+    fs.chmodSync(temporaryPath, 0o600);
+    fs.renameSync(temporaryPath, YTDLP_COOKIES_PATH);
+  } finally {
+    fs.rmSync(temporaryPath, { force: true });
+  }
+}

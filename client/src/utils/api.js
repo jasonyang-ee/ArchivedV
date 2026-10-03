@@ -1,160 +1,41 @@
-const API_BASE = import.meta.env.PROD ? "/api" : "http://localhost:3000/api";
+const API_BASE = "/api";
+
+// One response contract for every caller, including failed mutations and proxy errors.
+export async function request(path, method = "GET", body) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+    signal: AbortSignal.timeout(30000),
+  });
+  let data;
+  try { data = await res.json(); } catch {
+    throw new Error(`Server returned an invalid response (HTTP ${res.status})`);
+  }
+  if (!res.ok) throw new Error(data.error || `Request failed (HTTP ${res.status})`);
+  return data;
+}
 
 export const api = {
-  // Config
-  async getConfig() {
-    const res = await fetch(`${API_BASE}/config`);
-    return res.json();
-  },
-
-  // Channels
-  async addChannel(link) {
-    const res = await fetch(`${API_BASE}/channels`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ link }),
-    });
-    return res.json();
-  },
-
-  async deleteChannel(id) {
-    const res = await fetch(`${API_BASE}/channels/${id}`, {
-      method: "DELETE",
-    });
-    return res.json();
-  },
-
-  // Keywords
-  async addKeyword(keyword) {
-    const res = await fetch(`${API_BASE}/keywords`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ keyword }),
-    });
-    return res.json();
-  },
-
-  async deleteKeyword(keyword) {
-    const res = await fetch(`${API_BASE}/keywords/${encodeURIComponent(keyword)}`, {
-      method: "DELETE",
-    });
-    return res.json();
-  },
-
-  // Ignore Keywords
-  async addIgnoreKeyword(keyword) {
-    const res = await fetch(`${API_BASE}/ignore-keywords`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ keyword }),
-    });
-    return res.json();
-  },
-
-  async deleteIgnoreKeyword(keyword) {
-    const res = await fetch(`${API_BASE}/ignore-keywords/${encodeURIComponent(keyword)}`, {
-      method: "DELETE",
-    });
-    return res.json();
-  },
-
-  // Date Format
-  async updateDateFormat(dateFormat) {
-    const res = await fetch(`${API_BASE}/date-format`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dateFormat }),
-    });
-    return res.json();
-  },
-
-  // Status
-  async getStatus() {
-    const res = await fetch(`${API_BASE}/status`);
-    return res.json();
-  },
-
-  async refresh() {
-    const res = await fetch(`${API_BASE}/refresh`, {
-      method: "POST",
-    });
-    return res.json();
-  },
-
-  // Downloads
-  async cancelDownload(downloadId) {
-    const res = await fetch(`${API_BASE}/downloads/${encodeURIComponent(downloadId)}`, {
-      method: "DELETE",
-    });
-    return res.json();
-  },
-
-  // Scheduled Streams
-  async removeScheduledStream(videoId) {
-    const res = await fetch(`${API_BASE}/scheduled-streams/${encodeURIComponent(videoId)}`, {
-      method: "DELETE",
-    });
-    return res.json();
-  },
-
-  // History
-  async getHistory() {
-    const res = await fetch(`${API_BASE}/history`);
-    return res.json();
-  },
-
-  async clearHistory() {
-    const res = await fetch(`${API_BASE}/history`, {
-      method: "DELETE",
-    });
-    return res.json();
-  },
-
-  // Auth / Cookies (members-only videos)
-  async getAuthStatus() {
-    const res = await fetch(`${API_BASE}/auth`);
-    return res.json();
-  },
-
-  async setUseCookies(useCookies) {
-    const res = await fetch(`${API_BASE}/auth`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ useCookies }),
-    });
-    return res.json();
-  },
-
-  async uploadCookies(cookiesText) {
-    const res = await fetch(`${API_BASE}/auth/cookies`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cookiesText }),
-    });
-    return res.json();
-  },
-
-  async clearCookies() {
-    const res = await fetch(`${API_BASE}/auth/cookies`, {
-      method: "DELETE",
-    });
-    return res.json();
-  },
-
-  // yt-dlp custom flags
-  async getYtdlpFlags() {
-    const res = await fetch(`${API_BASE}/ytdlp-flags`);
-    return res.json();
-  },
-
-  async setYtdlpFlags(ytdlpFlags) {
-    const res = await fetch(`${API_BASE}/ytdlp-flags`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ytdlpFlags }),
-    });
-    return res.json();
-  },
+  getConfig: () => request("/config"),
+  addChannel: (link) => request("/channels", "POST", { link }),
+  deleteChannel: (id) => request(`/channels/${encodeURIComponent(id)}`, "DELETE"),
+  addKeyword: (keyword) => request("/keywords", "POST", { keyword }),
+  deleteKeyword: (keyword) => request(`/keywords/${encodeURIComponent(keyword)}`, "DELETE"),
+  addIgnoreKeyword: (keyword) => request("/ignore-keywords", "POST", { keyword }),
+  deleteIgnoreKeyword: (keyword) => request(`/ignore-keywords/${encodeURIComponent(keyword)}`, "DELETE"),
+  updateDateFormat: (dateFormat) => request("/date-format", "POST", { dateFormat }),
+  getStatus: () => request("/status"),
+  refresh: () => request("/refresh", "POST"),
+  cancelDownload: (id) => request(`/downloads/${encodeURIComponent(id)}`, "DELETE"),
+  removeScheduledStream: (id) => request(`/scheduled-streams/${encodeURIComponent(id)}`, "DELETE"),
+  getHistory: () => request("/history"),
+  clearHistory: () => request("/history", "DELETE"),
+  getAuthStatus: () => request("/auth"),
+  setUseCookies: (useCookies) => request("/auth", "POST", { useCookies }),
+  uploadCookies: (cookiesText) => request("/auth/cookies", "PUT", { cookiesText }),
+  clearCookies: () => request("/auth/cookies", "DELETE"),
+  getYtdlpFlags: () => request("/ytdlp-flags"),
+  setYtdlpFlags: (ytdlpFlags) => request("/ytdlp-flags", "POST", { ytdlpFlags }),
 };
 
 export default api;

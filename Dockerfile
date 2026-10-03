@@ -42,11 +42,12 @@ COPY --from=builder /app/package*.json ./
 COPY server ./server
 
 # Install production dependencies only
-RUN npm ci --only=production --ignore-scripts && \
+RUN npm ci --omit=dev --ignore-scripts && \
     npm cache clean --force
 
 # Create necessary directories
-RUN mkdir -p /app/data /app/download
+RUN mkdir -p /app/data /app/download && chown -R node:node /app/data /app/download
+USER node
 
 # Set environment variables
 ENV PORT=3000
@@ -54,7 +55,7 @@ ENV NODE_ENV=production
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD sh -c "node -e \"require('http').get('http://localhost:\${PORT}', (r) => process.exit(r.statusCode === 200 ? 0 : 1))\""
+  CMD sh -c "node -e \"require('http').get('http://127.0.0.1:\${PORT}/api/status', (r) => process.exit(r.statusCode === 200 ? 0 : 1))\""
 
 # Start the application
 CMD ["node", "server/index.js"]

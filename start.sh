@@ -35,10 +35,11 @@ cleanup() {
     echo "Shutting down..."
     [ -n "$DEV_PID" ] && kill "$DEV_PID" 2>/dev/null || true
     echo "Stopped."
-    exit 0
+    return 0
 }
 
-trap cleanup SIGTERM SIGINT
+trap 'cleanup; exit 130' SIGINT
+trap 'cleanup; exit 143' SIGTERM
 
 # Start development servers
 echo "Starting development servers..."
@@ -67,4 +68,4 @@ if [ $EXIT_CODE -ne 0 ]; then
 fi
 
 cleanup
-exit $EXIT_CODE
+exit "$EXIT_CODE"

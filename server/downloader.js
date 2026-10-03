@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
 import db from "./database.js";
-import { autoMerge } from "./merger.js";
+import { autoMerge, downloadingFolders, isFolderBusy } from "./merger.js";
 import {
   canUseCookies,
   getYtDlpAuthArgs,
@@ -16,9 +16,11 @@ import {
   isFinalVideoFile,
   isPartialDownloadFile,
   isAuxiliaryFile,
+  isSafeDownloadPath,
+  isSafeIdentifier,
+  isSubstantialFile,
 } from "./utils.js";
 import {
-  DOWNLOAD_DIR,
   MAX_AUTH_FAILURE_ATTEMPTS,
   MAX_CONCURRENT_DOWNLOADS,
   RETRY_BASE_DELAY_MS,
@@ -26,7 +28,6 @@ import {
   DOWNLOAD_WATCHDOG_INTERVAL_MS,
   DOWNLOAD_WATCHDOG_NO_OUTPUT_MS,
   DOWNLOAD_WATCHDOG_MIN_RUNTIME_MS,
-  SCHEDULED_STREAM_LEAD_TIME_MS,
   PUSHOVER_APP_TOKEN,
   PUSHOVER_USER_TOKEN,
 } from "./config.js";
@@ -50,8 +51,10 @@ export const status = {
 
 // Active downloads tracking (for cancellation)
 export const activeDownloads = new Map(); // downloadId -> { proc, downloadInfo, dir }
+let shuttingDown = false;
 
 export function canStartAnotherDownload() {
+  if (shuttingDown) return false;
   if (!MAX_CONCURRENT_DOWNLOADS) return true;
   return activeDownloads.size < MAX_CONCURRENT_DOWNLOADS;
 }
@@ -67,6 +70,7 @@ export function getRetryQueueCounts() {
 
 export function inspectDownloadFolder(folderPath) {
   try {
+    if (!isSafeDownloadPath(folderPath)) return { kind: "unknown", error: "Unsafe archive path" };
     if (!fs.existsSync(folderPath)) return { kind: "missing" };
     const files = fs.readdirSync(folderPath);
     if (files.length === 0) return { kind: "empty" };
@@ -79,14 +83,7 @@ export function inspectDownloadFolder(folderPath) {
 
     if (finalVideos.length > 0) {
       // Heuristic: consider it complete if any final video is > 1MB
-      const hasSubstantial = finalVideos.some((f) => {
-        try {
-          const stat = fs.statSync(path.join(folderPath, f));
-          return stat.size > 1024 * 1024;
-        } catch {
-          return false;
-        }
-      });
+      const hasSubstantial = finalVideos.some((file) => isSubstantialFile(path.join(folderPath, file)));
       if (hasSubstantial) return { kind: "complete", finalVideos, partials };
       // A tiny final file can be a failed merge; treat as incomplete
       return { kind: "incomplete", finalVideos, partials };
@@ -120,6 +117,7 @@ function buildHistoryEntry(downloadInfo, extra = {}) {
     title: downloadInfo.title,
     time: nowIso(),
     videoId: downloadInfo.videoId,
+    dir: downloadInfo.dir,
     ...(channelId && { channelId }),
     ...(username && { username }),
     ...(channelName && { channelName }),
@@ -254,6 +252,7 @@ export function upsertRetryJob(job, update = {}) {
 // Safe directory cleanup - only removes truly empty directories, never deletes video files
 export function safeCleanupDirectory(dir, reason = "") {
   try {
+    if (!isSafeDownloadPath(dir)) return { cleaned: false, reason: "Unsafe archive path" };
     if (!fs.existsSync(dir)) {
       return { cleaned: false, reason: "Directory does not exist" };
     }
@@ -290,24 +289,48 @@ export function safeCleanupDirectory(dir, reason = "") {
   }
 }
 
-function handleDownloadSuccess(dir, downloadInfo, note = null) {
-  autoMerge(dir, () => {
-    status.lastCompleted = downloadInfo.title;
-    const message = note ? `Stream ended: ${downloadInfo.title}` : `Downloaded: ${downloadInfo.title}`;
-    if (PUSHOVER_APP_TOKEN && PUSHOVER_USER_TOKEN) {
-      push.send({ message, title: downloadInfo.title }, () => {});
+export function recordDownloadSuccess(dir, downloadInfo, note = null) {
+  status.lastCompleted = downloadInfo.title;
+  db.read();
+  if (!db.data.history.some((item) => item.videoId === downloadInfo.videoId && item.channelId === downloadInfo.channel && item.status !== "skipped")) {
+    db.data.history.push(buildHistoryEntry({ ...downloadInfo, dir }, note ? { note } : {}));
+  }
+  db.data.retryQueue = db.data.retryQueue.filter((job) => !(job.channelId === downloadInfo.channel && job.videoId === downloadInfo.videoId));
+  db.data.scheduledStreams = db.data.scheduledStreams.filter((job) => !(job.channelId === downloadInfo.channel && job.videoId === downloadInfo.videoId));
+  db.write();
+  if (PUSHOVER_APP_TOKEN && PUSHOVER_USER_TOKEN) {
+    push.send({ message: `Downloaded: ${downloadInfo.title}`, title: downloadInfo.title }, (error) => {
+      if (error) console.warn("[WARN] [Archived V] Download notification failed");
+    });
+  }
+}
+
+// Keep ownership until close, even after SIGTERM; a sent signal is not an exited process.
+export function stopDownload(tracking) {
+  if (tracking.stopping || tracking.closed) return;
+  tracking.stopping = true;
+  const signal = (name) => {
+    try {
+      if (process.platform !== "win32" && tracking.proc.pid) process.kill(-tracking.proc.pid, name);
+      else tracking.proc.kill(name);
+    } catch (error) {
+      if (error.code !== "ESRCH") throw error;
     }
-    db.read();
-    db.data.history.push(buildHistoryEntry(downloadInfo, note ? { note } : {}));
-    db.data.retryQueue = (db.data.retryQueue || []).filter(
-      (j) => !(j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId)
-    );
-    // Also clean up from scheduledStreams if it was promoted
-    db.data.scheduledStreams = (db.data.scheduledStreams || []).filter(
-      (s) => !(s.channelId === downloadInfo.channel && s.videoId === downloadInfo.videoId)
-    );
-    db.write();
-  });
+  };
+  signal("SIGTERM");
+  tracking.killTimer = setTimeout(() => {
+    if (!tracking.closed) signal("SIGKILL");
+  }, 10000);
+  tracking.killTimer.unref?.();
+}
+
+export function stopDownloads() {
+  shuttingDown = true;
+  for (const tracking of activeDownloads.values()) {
+    try { stopDownload(tracking); } catch (error) {
+      console.error(`[ERROR] [Archived V] Could not stop download: ${error.message}`);
+    }
+  }
 }
 
 // Get user-defined yt-dlp flags from database
@@ -322,16 +345,21 @@ function getUserYtDlpFlags() {
 }
 
 export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
+  if (shuttingDown) throw new Error("Server is shutting down");
   for (const download of activeDownloads.values()) {
     if (download.downloadInfo.channel === downloadInfo.channel &&
         download.downloadInfo.videoId === downloadInfo.videoId) return download.proc;
   }
+  if (!isSafeDownloadPath(dir) || !isSafeIdentifier(downloadInfo.channel) || !isSafeIdentifier(downloadInfo.videoId)) throw new Error("Unsafe download identity or directory");
+  if (isFolderBusy(dir)) return null;
   const userFlags = getUserYtDlpFlags();
-  
+
   const args = [
+    "--ignore-config",
+    "--no-playlist",
     ...getYtDlpAuthArgs(),
     "--live-from-start",
-    "-ciw",
+    "-cw",
     "--no-part",
     "--no-progress",
     "--no-cache-dir",
@@ -342,13 +370,12 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
     "--fragment-retries",
     "50",
     "--skip-unavailable-fragments",
-    "--no-abort-on-error",
     "--js-runtimes",
     "node",
     "--remote-components",
     "ejs:npm",
     "-o",
-    path.join(dir, "%(title)s.%(ext)s"),
+    path.join(dir.replaceAll("%", "%%"), "%(title).180B.%(ext)s"),
     "--write-thumbnail",
     "--convert-thumbnails",
     "png",
@@ -361,10 +388,11 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
     "mp4",
     // Append user-defined flags
     ...userFlags,
-    videoLink,
+    "--",
+    `https://www.youtube.com/watch?v=${downloadInfo.videoId}`,
   ];
 
-  const proc = spawn("yt-dlp", args, { stdio: ["pipe", "pipe", "pipe"] });
+  const proc = spawn("yt-dlp", args, { detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"] });
 
   const startedAt = Date.now();
   const tracking = {
@@ -375,6 +403,7 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
     startedAt,
     lastOutputAt: Date.now(),
     stderr: "",
+    stderrLine: "",
     killedByWatchdog: false,
     killedByAuthSkip: false,
     killedBy403Loop: false,
@@ -382,10 +411,11 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
   };
 
   activeDownloads.set(downloadId, tracking);
+  downloadingFolders.add(path.resolve(dir));
 
   // Failed spawns emit error before close; close owns cleanup and retrying.
   proc.on("error", (error) => {
-    tracking.stderr += `\n${error.message}`;
+    tracking.stderr = (tracking.stderr + `\n${error.message}`).slice(-65536);
     console.error(`[ERROR] [Archived V] yt-dlp process error: ${error.message}`);
   });
 
@@ -395,16 +425,18 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
       .toString()
       .split(/\r?\n/)
       .forEach((line) => {
-        if (line) console.log(`[yt-dlp] ${line}`);
+        if (line) console.log(`[INFO] [yt-dlp] ${line}`);
       });
   });
 
   proc.stderr.on("data", (chunk) => {
     tracking.lastOutputAt = Date.now();
     const text = chunk.toString();
-    tracking.stderr += text;
-    text.split(/\r?\n/).forEach((line) => {
-      if (line) console.warn(`[yt-dlp] ${line}`);
+    tracking.stderr = (tracking.stderr + text).slice(-65536);
+    const lines = (tracking.stderrLine + text).split(/\r?\n/);
+    tracking.stderrLine = lines.pop().slice(-8192);
+    lines.forEach((line) => {
+      if (line) console.warn(`[WARN] [yt-dlp] ${line}`);
 
       // Detect 403 Forbidden retry loops (stream ended but yt-dlp keeps retrying fragments)
       // Count ALL consecutive 403 errors regardless of fragment number, since video+audio
@@ -420,7 +452,7 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
               `[WARN] [Archived V] Stopping yt-dlp for "${downloadInfo.title}" - stream appears to have ended (${tracking.consecutive403Count} consecutive 403 errors)`
             );
             try {
-              proc.kill("SIGTERM");
+              stopDownload(tracking);
             } catch {}
           }
         } else if (line.trim()) {
@@ -450,177 +482,177 @@ export function startYtDlp(downloadId, downloadInfo, dir, videoLink) {
           );
 
           try {
-            proc.kill("SIGTERM");
+            stopDownload(tracking);
           } catch {}
         }
       }
     });
   });
 
-  proc.on("close", (code) => {
-    // Always clear active tracking
-    activeDownloads.delete(downloadId);
-
-    // Remove from status + db current downloads
-    status.currentDownloads = status.currentDownloads.filter((d) => d.id !== downloadId);
-    db.read();
-    db.data.currentDownloads = (db.data.currentDownloads || []).filter((d) => d.id !== downloadId);
-    db.write();
-
-    if (tracking.cancelled) {
-      autoMerge(dir);
+  proc.once("close", (code) => {
+    tracking.closed = true;
+    clearTimeout(tracking.killTimer);
+    // A parent may close its pipes before an ignored-SIGTERM descendant exits.
+    if (tracking.stopping && process.platform !== "win32" && proc.pid) {
+      try { process.kill(-proc.pid, "SIGKILL"); } catch (error) {
+        if (error.code !== "ESRCH") console.error(`[ERROR] [Archived V] Could not stop process group: ${error.message}`);
+      }
+    }
+    downloadingFolders.delete(path.resolve(dir));
+    // Preserve persisted current/retry rows for startup recovery; do not begin
+    // a new recovery subprocess while the server is stopping.
+    if (shuttingDown) {
+      activeDownloads.delete(downloadId);
       return;
     }
+    tracking.finalizing = true;
+    downloadInfo.phase = "saving";
+    autoMerge(dir, () => {
+      activeDownloads.delete(downloadId);
+      if (shuttingDown) return;
+      status.currentDownloads = status.currentDownloads.filter((d) => d.id !== downloadId);
+      db.read();
+      db.data.currentDownloads = db.data.currentDownloads.filter((d) => d.id !== downloadId);
+      db.write();
+      if (tracking.cancelled) return;
+      if (inspectDownloadFolder(dir).kind === "complete") {
+        recordDownloadSuccess(dir, downloadInfo, tracking.killedBy403Loop ? "stream ended" : null);
+        return;
+      }
+      if (tracking.killedByAuthSkip || !db.data.channels.some((channel) => channel.id === downloadInfo.channel)) return;
 
-    // If killed by 403 loop, treat as stream ended - clean up and mark as complete
-    if (tracking.killedBy403Loop) {
-      handleDownloadSuccess(dir, downloadInfo, "stream ended");
-      console.log(`[INFO] [Archived V] Stream ended for "${downloadInfo.title}" - download complete (403 loop detected)`);
-      return;
-    }
+      const stderr = tracking.stderr || "";
+      const folderState = inspectDownloadFolder(dir);
 
-    // If watchdog or auth-skip killed it, they already handled requeue - just clean up
-    if (tracking.killedByWatchdog || tracking.killedByAuthSkip) {
-      return;
-    }
+      const authFailure = classifyYtDlpAuthFailure(stderr);
+      if (authFailure) {
+        const cookiesAvailable = canUseCookies();
 
-    if (code === 0) {
-      handleDownloadSuccess(dir, downloadInfo);
-      return;
-    }
+        db.read();
+        const existing = (db.data.retryQueue || []).find(
+          (j) => j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId
+        );
+        const attempts = (existing?.attempts || 0) + 1;
 
-    const stderr = tracking.stderr || "";
-    const folderState = inspectDownloadFolder(dir);
+        // If no cookies configured, skip this video without tracking it in history.
+        if (!cookiesAvailable) {
+          db.read();
+          db.data.retryQueue = (db.data.retryQueue || []).filter(
+            (j) => !(j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId)
+          );
+          db.write();
 
-    const authFailure = classifyYtDlpAuthFailure(stderr);
-    if (authFailure) {
-      const cookiesAvailable = canUseCookies();
+          markAuthSkipped(downloadInfo.videoId);
+          console.warn(
+            `[WARN] [Archived V] Skipping auth-required video "${downloadInfo.title}" (no cookies; ${authFailure.reason}).`
+          );
+          return;
+        }
 
+        // Cookies are configured but auth still failed: retry a few times, then stop.
+        if (attempts >= MAX_AUTH_FAILURE_ATTEMPTS) {
+          db.read();
+          db.data.retryQueue = (db.data.retryQueue || []).filter(
+            (j) => !(j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId)
+          );
+          markAuthSkipped(downloadInfo.videoId);
+          db.data.history.push(buildHistoryEntry(downloadInfo, {
+            status: "skipped",
+            reason: `auth_failed_${authFailure.reason}`,
+          }));
+          db.write();
+
+          console.warn(
+            `[WARN] [Archived V] Skipping "${downloadInfo.title}" after ${attempts} auth failures (${authFailure.reason}).`
+          );
+          return;
+        }
+      }
+
+      // Soft-failure cases should be retried.
+      const isScheduledLiveEvent = stderr.includes("This live event will begin");
+
+      // If this is a scheduled live event, move to scheduledStreams instead of retryQueue
+      if (isScheduledLiveEvent) {
+        const scheduledFor = parseScheduledTime(stderr);
+        if (scheduledFor) {
+          addScheduledStream(
+            {
+              channelId: downloadInfo.channel,
+              videoId: downloadInfo.videoId,
+              title: downloadInfo.title,
+              username: downloadInfo.username,
+              channelName: downloadInfo.channelName,
+              videoLink,
+              dir,
+            },
+            scheduledFor
+          );
+
+          // Clean up empty folder if one was created
+          if (folderState.kind === "empty") {
+            safeCleanupDirectory(dir, "scheduled stream (not yet live)");
+          }
+          return;
+        }
+        // If we couldn't parse the time, fall through to normal retry
+      }
+
+      const retryReason = isScheduledLiveEvent
+        ? "Live scheduled; retry later"
+        : folderState.kind === "incomplete"
+          ? "Partial/incomplete download; retry"
+          : "Download failed; retry";
+
+      // upsertRetryJob will do db.read(), but we need to get the attempt count first
       db.read();
       const existing = (db.data.retryQueue || []).find(
         (j) => j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId
       );
       const attempts = (existing?.attempts || 0) + 1;
 
-      // If no cookies configured, skip this video without tracking it in history.
-      if (!cookiesAvailable) {
-        db.read();
-        db.data.retryQueue = (db.data.retryQueue || []).filter(
-          (j) => !(j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId)
-        );
-        db.write();
-
-        markAuthSkipped(downloadInfo.videoId);
-        console.warn(
-          `[WARN] [Archived V] Skipping auth-required video "${downloadInfo.title}" (no cookies; ${authFailure.reason}).`
-        );
-        return;
-      }
-
-      // Cookies are configured but auth still failed: retry a few times, then stop.
-      if (attempts >= MAX_AUTH_FAILURE_ATTEMPTS) {
-        db.read();
-        db.data.retryQueue = (db.data.retryQueue || []).filter(
-          (j) => !(j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId)
-        );
-        db.data.history.push(buildHistoryEntry(downloadInfo, {
-          status: "skipped",
-          reason: `auth_failed_${authFailure.reason}`,
-        }));
-        db.write();
-
-        console.warn(
-          `[WARN] [Archived V] Skipping "${downloadInfo.title}" after ${attempts} auth failures (${authFailure.reason}).`
-        );
-        return;
-      }
-    }
-
-    // If we ended up with a usable merged file, treat it as success.
-    if (folderState.kind === "complete") {
-      handleDownloadSuccess(dir, downloadInfo);
-      console.warn(
-        `[WARN] [Archived V] yt-dlp exited ${code} but produced a usable file for "${downloadInfo.title}"; recording as success.`
-      );
-      return;
-    }
-
-    // Soft-failure cases should be retried.
-    const isScheduledLiveEvent = stderr.includes("This live event will begin");
-
-    // If this is a scheduled live event, move to scheduledStreams instead of retryQueue
-    if (isScheduledLiveEvent) {
-      const scheduledFor = parseScheduledTime(stderr);
-      if (scheduledFor) {
-        addScheduledStream(
-          {
-            channelId: downloadInfo.channel,
-            videoId: downloadInfo.videoId,
-            title: downloadInfo.title,
-            username: downloadInfo.username,
-            channelName: downloadInfo.channelName,
-            videoLink,
-            dir,
-          },
-          scheduledFor
-        );
-
-        // Clean up empty folder if one was created
-        if (folderState.kind === "empty") {
-          safeCleanupDirectory(dir, "scheduled stream (not yet live)");
+      upsertRetryJob(
+        {
+          channelId: downloadInfo.channel,
+          videoId: downloadInfo.videoId,
+          title: downloadInfo.title,
+          username: downloadInfo.username,
+          channelName: downloadInfo.channelName,
+          videoLink,
+          dir,
+        },
+        {
+          attempts,
+          lastError: `${retryReason} (exit ${code})`,
+          nextAttemptAt: computeNextAttempt(attempts),
+          inProgress: false,
         }
-        return;
+      );
+
+      // Try cleaning up only if truly empty
+      if (folderState.kind === "empty") {
+        safeCleanupDirectory(dir, "download failed (empty)");
       }
-      // If we couldn't parse the time, fall through to normal retry
-    }
-
-    const retryReason = isScheduledLiveEvent
-      ? "Live scheduled; retry later"
-      : folderState.kind === "incomplete"
-        ? "Partial/incomplete download; retry"
-        : "Download failed; retry";
-
-    // upsertRetryJob will do db.read(), but we need to get the attempt count first
-    db.read();
-    const existing = (db.data.retryQueue || []).find(
-      (j) => j.channelId === downloadInfo.channel && j.videoId === downloadInfo.videoId
-    );
-    const attempts = (existing?.attempts || 0) + 1;
-
-    upsertRetryJob(
-      {
-        channelId: downloadInfo.channel,
-        videoId: downloadInfo.videoId,
-        title: downloadInfo.title,
-        username: downloadInfo.username,
-        channelName: downloadInfo.channelName,
-        videoLink,
-        dir,
-      },
-      {
-        attempts,
-        lastError: `${retryReason} (exit ${code})`,
-        nextAttemptAt: computeNextAttempt(attempts),
-        inProgress: false,
-      }
-    );
-
-    // Try cleaning up only if truly empty
-    if (folderState.kind === "empty") {
-      safeCleanupDirectory(dir, "download failed (empty)");
-    }
+    });
   });
 
   return proc;
 }
 
 export function startDownloadWatchdog() {
-  setInterval(() => {
+  return setInterval(() => {
     const now = Date.now();
     for (const [downloadId, dl] of activeDownloads.entries()) {
-      if (!dl?.proc || dl.proc.killed) continue;
+      if (!dl?.proc || dl.stopping || dl.closed) continue;
       const runtime = now - (dl.startedAt || now);
-      const quiet = now - (dl.lastOutputAt || now);
+      let lastActivity = dl.lastOutputAt || now;
+      try {
+        for (const file of fs.readdirSync(dl.dir)) {
+          const stat = fs.statSync(path.join(dl.dir, file));
+          if (stat.isFile()) lastActivity = Math.max(lastActivity, stat.mtimeMs);
+        }
+      } catch {}
+      const quiet = now - lastActivity;
 
       if (runtime < DOWNLOAD_WATCHDOG_MIN_RUNTIME_MS) continue;
       if (quiet < DOWNLOAD_WATCHDOG_NO_OUTPUT_MS) continue;
@@ -628,36 +660,9 @@ export function startDownloadWatchdog() {
       console.error(
         `[ERROR] [Archived V] Watchdog: killing stuck yt-dlp (no output for ${Math.round(quiet / 1000)}s) for "${dl.downloadInfo?.title}"`
       );
-      try {
-        dl.killedByWatchdog = true;
-        dl.proc.kill("SIGTERM");
-      } catch {}
-
-      // Ensure retry is scheduled
-      const info = dl.downloadInfo;
-      if (info?.channel && info?.videoId) {
-        db.read();
-        const existing = (db.data.retryQueue || []).find(
-          (j) => j.channelId === info.channel && j.videoId === info.videoId
-        );
-        const attempts = (existing?.attempts || 0) + 1;
-        upsertRetryJob(
-          {
-            channelId: info.channel,
-            videoId: info.videoId,
-            title: info.title,
-            username: info.username,
-            channelName: info.channelName,
-            videoLink: dl.videoLink,
-            dir: dl.dir,
-          },
-          {
-            attempts,
-            lastError: `Watchdog killed process (quiet ${Math.round(quiet / 1000)}s)`,
-            nextAttemptAt: computeNextAttempt(attempts),
-            inProgress: false,
-          }
-        );
+      dl.killedByWatchdog = true;
+      try { stopDownload(dl); } catch (error) {
+        console.error(`[ERROR] [Archived V] Could not stop download: ${error.message}`);
       }
     }
   }, DOWNLOAD_WATCHDOG_INTERVAL_MS);
@@ -669,7 +674,7 @@ export function recoverStaleDownloads() {
   const staleDownloads = Array.isArray(db.data.currentDownloads) ? db.data.currentDownloads : [];
   for (const stale of staleDownloads) {
     const channelId = stale.channel;
-    const videoId = stale.videoId || (typeof stale.id === "string" ? stale.id.split("-")[1] : undefined);
+    const videoId = stale.videoId;
     if (!channelId || !videoId) continue;
     const fallbackLink = stale.videoLink || `https://www.youtube.com/watch?v=${videoId}`;
     upsertRetryJob(
@@ -722,11 +727,7 @@ export function cleanupRetryQueue() {
     // Remove entries matching ignore keywords
     if (job.title && ignoreKeywords.some((k) => job.title.toLowerCase().includes(k))) continue;
 
-    // Remove entries for already-downloaded videos (complete folder exists)
-    if (job.dir) {
-      const folderState = inspectDownloadFolder(job.dir);
-      if (folderState.kind === "complete") continue;
-    }
+    // Complete recovered jobs stay queued until success/history is reconciled.
 
     // Reset inProgress flag (no active processes at startup)
     job.inProgress = false;
@@ -735,9 +736,9 @@ export function cleanupRetryQueue() {
   }
 
   const removed = before - cleaned.length;
+  db.data.retryQueue = cleaned;
+  db.write();
   if (removed > 0) {
-    db.data.retryQueue = cleaned;
-    db.write();
     console.log(`[INFO] [Archived V] Startup cleanup: removed ${removed} ghost/invalid retry queue entry(ies) (${before} -> ${cleaned.length})`);
   }
 }

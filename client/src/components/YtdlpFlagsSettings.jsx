@@ -5,6 +5,7 @@ export default function YtdlpFlagsSettings() {
   const [flags, setFlags] = useState("");
   const [savedFlags, setSavedFlags] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -15,10 +16,11 @@ export default function YtdlpFlagsSettings() {
   }
 
   useEffect(() => {
-    refresh().catch((e) => setError(e?.message || String(e)));
+    refresh().catch((e) => setError(e?.message || String(e))).finally(() => setLoading(false));
   }, []);
 
   async function handleSave() {
+    if (busy || loading) return;
     setBusy(true);
     setError("");
     setSuccess("");
@@ -26,8 +28,8 @@ export default function YtdlpFlagsSettings() {
       const res = await api.setYtdlpFlags(flags);
       if (res?.error) throw new Error(res.error);
       setSavedFlags(res.ytdlpFlags || "");
+      setFlags(res.ytdlpFlags || "");
       setSuccess("Settings saved successfully!");
-      setTimeout(() => setSuccess(""), 3000);
     } catch (e) {
       setError(e?.message || String(e));
     } finally {
@@ -37,6 +39,7 @@ export default function YtdlpFlagsSettings() {
 
   function handleClear() {
     setFlags("");
+    setSuccess("");
   }
 
   const hasChanges = flags !== savedFlags;
@@ -58,20 +61,20 @@ export default function YtdlpFlagsSettings() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
+        <div role="alert" className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-300">
           {error}
         </div>
       )}
 
       {success && (
-        <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-sm text-green-700 dark:text-green-300">
+        <div role="status" className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg text-sm text-green-700 dark:text-green-300">
           {success}
         </div>
       )}
 
       <div className="space-y-3">
         <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-          <p className="mb-2">Enter any additional yt-dlp flags, separated by spaces</p>
+          <p className="mb-2">Supported format, subtitle and speed options, separated by spaces</p>
           <p className="mb-2">Examples:</p>
           <ul className="list-disc list-inside ml-2 space-y-1">
             <li><code className="bg-gray-100 dark:bg-[#333333] px-1 rounded">--write-description</code> - Save video description</li>
@@ -80,9 +83,12 @@ export default function YtdlpFlagsSettings() {
           </ul>
         </div>
 
+        <label className="label" htmlFor="ytdlp-flags">Download options</label>
         <textarea
+          id="ytdlp-flags"
+          disabled={busy || loading}
           value={flags}
-          onChange={(e) => setFlags(e.target.value)}
+          onChange={(e) => { setFlags(e.target.value); setSuccess(""); }}
           placeholder="e.g., --write-description --embed-subs"
           rows={3}
           className="input w-full font-mono text-sm"
@@ -91,17 +97,17 @@ export default function YtdlpFlagsSettings() {
         <div className="flex gap-2">
           <button
             onClick={handleSave}
-            disabled={busy || !hasChanges}
-            className="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={busy || loading || !hasChanges}
+            className="btn btn-primary"
           >
-            Save Settings
+            {busy ? "Saving..." : "Save Settings"}
           </button>
           <button
             onClick={handleClear}
-            disabled={busy || !flags}
-            className="btn btn-danger text-sm"
+            disabled={busy || loading || !flags}
+            className="btn btn-secondary text-sm"
           >
-            Clear
+            Clear Draft
           </button>
         </div>
 

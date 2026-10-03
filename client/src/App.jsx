@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { api } from "./utils/api.js";
 import Header from "./components/Header";
 import ChannelList from "./components/ChannelList";
@@ -17,15 +17,16 @@ function App() {
   const [status, setStatus] = useState({
     lastRun: null,
     downloadedCount: 0,
-    current: null,
+    currentDownloads: [],
     lastCompleted: null,
   });
   const [history, setHistory] = useState([]);
+  const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(true);
+  const reads = useRef({ config: 0, status: 0, history: 0 });
   const [darkMode, setDarkMode] = useState(() => {
     // Initialize from localStorage or default to true
-    const saved = localStorage.getItem('darkMode');
-    return saved !== null ? JSON.parse(saved) : true;
+    try { return localStorage.getItem('darkMode') !== 'false'; } catch { return true; }
   });
 
   // Apply dark mode class to document
@@ -35,160 +36,99 @@ function App() {
     } else {
       document.documentElement.classList.remove('dark');
     }
-    localStorage.setItem('darkMode', JSON.stringify(darkMode));
+    try { localStorage.setItem('darkMode', JSON.stringify(darkMode)); } catch { /* Storage may be unavailable. */ }
   }, [darkMode]);
 
-  // Load initial data
+  // Schedule the next poll after the previous one finishes to avoid overlap.
   useEffect(() => {
-    loadData();
-    loadHistory();
+    let disposed = false;
+    let timer;
+    async function poll() {
+      await Promise.all([loadStatus(), loadHistory()]);
+      if (!disposed) timer = setTimeout(poll, 5000);
+    }
+    loadData().catch(() => {}).finally(() => { if (!disposed) setLoading(false); });
+    poll();
+    return () => { disposed = true; clearTimeout(timer); };
   }, []);
 
-  // Poll status every 5 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      loadStatus();
-      loadHistory();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
+  function reportError(key, message) {
+    setErrors((previous) => ({ ...previous, [key]: message }));
+  }
 
   async function loadData() {
+    const revision = ++reads.current.config;
     try {
       const config = await api.getConfig();
+      if (revision !== reads.current.config) return;
       setChannels(config.channels || []);
       setKeywords(config.keywords || []);
       setIgnoreKeywords(config.ignoreKeywords || []);
       setDateFormat(config.dateFormat || 'YYYY-MM-DD');
-      await loadStatus();
+      reportError("config", "");
     } catch (err) {
-      console.error("Failed to load config:", err);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadStatus() {
-    try {
-      const statusData = await api.getStatus();
-      setStatus(statusData);
-    } catch (err) {
-      console.error("Failed to load status:", err);
-    }
-  }
-
-  async function loadHistory() {
-    try {
-      const historyData = await api.getHistory();
-      setHistory(historyData || []);
-    } catch (err) {
-      console.error("Failed to load history:", err);
-    }
-  }
-
-  async function handleAddChannel(link) {
-    try {
-      await api.addChannel(link);
-      await loadData();
-    } catch (err) {
+      if (revision !== reads.current.config) return;
+      reportError("config", err.message);
       throw err;
     }
   }
 
-  async function handleDeleteChannel(id) {
+  async function loadStatus() {
+    const revision = ++reads.current.status;
     try {
-      await api.deleteChannel(id);
-      await loadData();
-    } catch (err) {
-      console.error("Failed to delete channel:", err);
-    }
-  }
-
-  async function handleAddKeyword(keyword) {
-    try {
-      await api.addKeyword(keyword);
-      await loadData();
-    } catch (err) {
-      console.error("Failed to add keyword:", err);
-    }
-  }
-
-  async function handleDeleteKeyword(keyword) {
-    try {
-      await api.deleteKeyword(keyword);
-      await loadData();
-    } catch (err) {
-      console.error("Failed to delete keyword:", err);
-    }
-  }
-
-  async function handleAddIgnoreKeyword(keyword) {
-    try {
-      await api.addIgnoreKeyword(keyword);
-      await loadData();
-    } catch (err) {
-      console.error("Failed to add ignore keyword:", err);
-    }
-  }
-
-  async function handleDeleteIgnoreKeyword(keyword) {
-    try {
-      await api.deleteIgnoreKeyword(keyword);
-      await loadData();
-    } catch (err) {
-      console.error("Failed to delete ignore keyword:", err);
-    }
-  }
-
-  async function handleRefresh() {
-    try {
-      const statusData = await api.refresh();
+      const statusData = await api.getStatus();
+      if (revision !== reads.current.status) return;
       setStatus(statusData);
+      reportError("status", "");
     } catch (err) {
-      console.error("Failed to refresh:", err);
+      if (revision !== reads.current.status) return;
+      reportError("status", err.message);
     }
   }
 
+  async function loadHistory() {
+    const revision = ++reads.current.history;
+    try {
+      const historyData = await api.getHistory();
+      if (revision !== reads.current.history) return;
+      setHistory(historyData || []);
+      reportError("history", "");
+    } catch (err) {
+      if (revision !== reads.current.history) return;
+      reportError("history", err.message);
+    }
+  }
+
+  async function changeConfig(action) {
+    await action();
+    await loadData();
+  }
+  const handleAddChannel = (link) => changeConfig(() => api.addChannel(link));
+  const handleDeleteChannel = (id) => changeConfig(() => api.deleteChannel(id));
+  const handleAddKeyword = (keyword) => changeConfig(() => api.addKeyword(keyword));
+  const handleDeleteKeyword = (keyword) => changeConfig(() => api.deleteKeyword(keyword));
+  const handleAddIgnoreKeyword = (keyword) => changeConfig(() => api.addIgnoreKeyword(keyword));
+  const handleDeleteIgnoreKeyword = (keyword) => changeConfig(() => api.deleteIgnoreKeyword(keyword));
+  async function handleRefresh() {
+    await api.refresh();
+    await Promise.all([loadData(), loadStatus(), loadHistory()]);
+  }
   async function handleDateFormatChange(newFormat) {
-    try {
-      await api.updateDateFormat(newFormat);
-      setDateFormat(newFormat);
-    } catch (err) {
-      console.error("Failed to update date format:", err);
-    }
+    await api.updateDateFormat(newFormat);
+    await loadData();
   }
-
-  async function handleCancelDownload(downloadId) {
-    try {
-      await api.cancelDownload(downloadId);
-      await loadStatus();
-      // Reload config to refresh ignore keywords list in UI
-      await loadData();
-    } catch (err) {
-      console.error("Failed to cancel download:", err);
-      alert("Failed to cancel download: " + (err.message || "Unknown error"));
-    }
+  async function handleCancelDownload(id) {
+    await api.cancelDownload(id);
+    await Promise.all([loadStatus(), loadData()]);
   }
-
-  async function handleRemoveScheduledStream(videoId) {
-    try {
-      await api.removeScheduledStream(videoId);
-      await loadStatus();
-    } catch (err) {
-      console.error("Failed to remove scheduled stream:", err);
-    }
+  async function handleRemoveScheduledStream(id) {
+    await api.removeScheduledStream(id);
+    await Promise.all([loadStatus(), loadData()]);
   }
-
   async function handleClearHistory() {
-    if (!window.confirm("Are you sure you want to clear the download history?")) {
-      return;
-    }
-    try {
-      await api.clearHistory();
-      await loadHistory();
-    } catch (err) {
-      console.error("Failed to clear history:", err);
-    }
+    if (!window.confirm("Clear download history? Saved videos will be kept.")) return false;
+    await api.clearHistory();
+    await loadHistory();
   }
 
   if (loading) {
@@ -205,8 +145,8 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-[#1f1f1f]">
       {/* Wide Header */}
-      <Header 
-        darkMode={darkMode} 
+      <Header
+        darkMode={darkMode}
         toggleDarkMode={() => setDarkMode(!darkMode)}
         dateFormat={dateFormat}
         onDateFormatChange={handleDateFormatChange}
@@ -214,11 +154,16 @@ function App() {
 
       {/* Main Content with New Layout */}
       <main className="max-w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
+        {Object.entries(errors).filter(([, message]) => message).map(([key, message]) => (
+          <div key={key} role="alert" className="mb-4 p-3 rounded-lg bg-red-50 text-red-800 dark:bg-red-900/20 dark:text-red-200">
+            Could not update {key}: {message}. Displayed data may be out of date. Use Refresh Now to retry.
+          </div>
+        ))}
         {/* Three Column Layout: Left Sidebar (Keywords) | Center (Status) | Right Sidebar (Channels) */}
-        <div className="grid grid-cols-1 min-[1420px]:grid-cols-[380px_minmax(600px,1fr)_480px] gap-4 sm:gap-6">
-          
+        <div className="grid grid-cols-1 min-[1600px]:grid-cols-[380px_minmax(0,1fr)_480px] gap-4 sm:gap-6">
+
           {/* Center - Download Status and History (shown first on mobile) */}
-          <div className="space-y-4 sm:space-y-6 min-w-0 order-first min-[1420px]:order-2">
+          <div className="space-y-4 sm:space-y-6 min-w-0 order-first min-[1600px]:order-2">
             <StatusDisplay
               status={status}
               onRefresh={handleRefresh}
@@ -229,7 +174,7 @@ function App() {
           </div>
 
           {/* Left Sidebar - Keywords */}
-          <div className="space-y-4 sm:space-y-6 order-2 min-[1420px]:order-1">
+          <div className="space-y-4 sm:space-y-6 order-2 min-[1600px]:order-1">
             <KeywordList
               keywords={keywords}
               onAddKeyword={handleAddKeyword}
