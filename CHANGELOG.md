@@ -7,8 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.8.0] - 2026-10-04
-
 ### Fixed
 
 - Downloads only enter successful history after saved output is present; failed exits, 403 loops, incomplete merges and exhausted authentication attempts retain correct retry/skip behavior.
