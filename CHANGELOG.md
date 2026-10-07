@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-10-06
+
 ### Fixed
 
 - Downloads only enter successful history after saved output is present; failed exits, 403 loops, incomplete merges and exhausted authentication attempts retain correct retry/skip behavior.
@@ -469,6 +471,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Express.js server
 - JSON database for data storage
 
-[Unreleased]: https://github.com/jasonyang-ee/ArchivedV/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/jasonyang-ee/ArchivedV/compare/v1.8.1...HEAD
 [1.7.4]: https://github.com/jasonyang-ee/ArchivedV/releases/tag/v1.7.4
 [1.8.0]: https://github.com/jasonyang-ee/ArchivedV/releases/tag/v1.8.0
+[1.8.1]: https://github.com/jasonyang-ee/ArchivedV/releases/tag/v1.8.1
